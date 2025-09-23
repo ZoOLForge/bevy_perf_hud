@@ -1,9 +1,6 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
-use bevy_perf_hud::{
-    BarConfig, BevyPerfHudPlugin, CurveConfig, HudHandles, METRIC_FPS, METRIC_FRAME_TIME_MS,
-    Settings,
-};
+use bevy_perf_hud::{BarConfig, BevyPerfHudPlugin, CurveConfig, HudHandles, Settings};
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
 enum HudMode {
@@ -338,7 +335,7 @@ fn main() {
                 y_scale_smoothing: 0.3,
                 curves: vec![
                     CurveConfig {
-                        metric_id: METRIC_FRAME_TIME_MS.into(),
+                        metric_id: "frame_time_ms".into(),
                         color: Color::srgb(0.0, 1.0, 0.0),
                         autoscale: true,
                         smoothing: 0.25,
@@ -347,7 +344,7 @@ fn main() {
                         unit_precision: 1,
                     },
                     CurveConfig {
-                        metric_id: METRIC_FPS.into(),
+                        metric_id: "fps".into(),
                         color: Color::srgb(0.9, 0.0, 0.0),
                         autoscale: true,
                         smoothing: 0.2,
@@ -358,18 +355,26 @@ fn main() {
                 ],
             },
             bars: bevy_perf_hud::BarsSettings {
-                enabled: false,
+                enabled: true,
                 bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
                 bars: vec![
                     BarConfig {
-                        metric_id: METRIC_FRAME_TIME_MS.into(),
+                        metric_id: "frame_time_ms".into(),
                         label: "Frame".into(),
                         color: Color::srgb(1.0, 0.3, 0.0),
+                        unit: Some("ms".into()),
                     },
                     BarConfig {
-                        metric_id: METRIC_FPS.into(),
+                        metric_id: "fps".into(),
                         label: "FPS".into(),
                         color: Color::srgb(0.0, 0.0, 1.0),
+                        unit: Some("fps".into()),
+                    },
+                    BarConfig {
+                        metric_id: "entity_count".into(),
+                        label: "Entities".into(),
+                        color: Color::srgb(0.1, 0.8, 0.4),
+                        unit: None,
                     },
                 ],
             },

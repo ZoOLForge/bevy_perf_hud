@@ -1,5 +1,5 @@
 use bevy::{
-    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    diagnostic::{DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin},
     prelude::*,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
     text::{TextColor, TextFont},
@@ -16,6 +16,7 @@ pub struct BevyPerfHudPlugin;
 impl Plugin for BevyPerfHudPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(FrameTimeDiagnosticsPlugin::default())
+            .add_plugins(EntityCountDiagnosticsPlugin::default())
             // Register UI materials (graph and bar)
             .add_plugins(UiMaterialPlugin::<MultiLineGraphMaterial>::default())
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
@@ -100,6 +101,13 @@ pub struct BarConfig {
     pub metric_id: String,
     pub label: String,
     pub color: Color,
+    pub unit: Option<String>,
+}
+
+#[derive(Clone)]
+pub struct GraphLabelHandle {
+    pub metric_id: String,
+    pub entity: Entity,
 }
 
 /// Handles to HUD entities
@@ -108,11 +116,12 @@ pub struct HudHandles {
     pub graph_row: Option<Entity>,
     pub graph_entity: Option<Entity>,
     pub graph_material: Option<Handle<MultiLineGraphMaterial>>,
-    pub graph_label_entities: Vec<Entity>,
+    pub graph_labels: Vec<GraphLabelHandle>,
     pub graph_label_width: f32,
     pub bars_root: Option<Entity>,
     pub bar_entities: Vec<Entity>,
     pub bar_materials: Vec<Handle<BarMaterial>>,
+    pub bar_labels: Vec<Entity>,
 }
 
 /// Sampled performance values
@@ -168,17 +177,21 @@ impl MetricProviders {
 
     /// 确保内置度量可用 / Ensure built-in metrics are registered
     pub fn ensure_default_entries(&mut self) {
-        if !self.contains(METRIC_FPS) {
-            self.add_provider(FpsMetricProvider::default());
-        }
-        if !self.contains(METRIC_FRAME_TIME_MS) {
-            self.add_provider(FrameTimeMetricProvider::default());
-        }
+        self.ensure_provider(FpsMetricProvider::default());
+        self.ensure_provider(FrameTimeMetricProvider::default());
+        self.ensure_provider(EntityCountMetricProvider::default());
     }
 
     /// 迭代所有提供者 / Iterate through all providers
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut dyn PerfMetricProvider> {
         self.providers.iter_mut().map(|p| p.as_mut())
+    }
+
+    fn ensure_provider<P: PerfMetricProvider>(&mut self, provider: P) {
+        let id = provider.metric_id().to_owned();
+        if !self.contains(&id) {
+            self.providers.push(Box::new(provider));
+        }
     }
 }
 
@@ -203,7 +216,7 @@ pub struct FpsMetricProvider;
 
 impl PerfMetricProvider for FpsMetricProvider {
     fn metric_id(&self) -> &str {
-        METRIC_FPS
+        "fps"
     }
 
     fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
@@ -221,7 +234,7 @@ pub struct FrameTimeMetricProvider;
 
 impl PerfMetricProvider for FrameTimeMetricProvider {
     fn metric_id(&self) -> &str {
-        METRIC_FRAME_TIME_MS
+        "frame_time_ms"
     }
 
     fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
@@ -230,6 +243,24 @@ impl PerfMetricProvider for FrameTimeMetricProvider {
             .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)?
             .smoothed()?;
         Some(frame_time.floor() as f32)
+    }
+}
+
+/// 实体数量提供者 / Entity count metric provider
+#[derive(Default)]
+pub struct EntityCountMetricProvider;
+
+impl PerfMetricProvider for EntityCountMetricProvider {
+    fn metric_id(&self) -> &str {
+        "entity_count"
+    }
+
+    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
+        let diagnostics = ctx.diagnostics?;
+        let entities = diagnostics
+            .get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT)?
+            .value()?;
+        Some(entities as f32)
     }
 }
 
@@ -252,9 +283,6 @@ impl Default for HistoryBuffers {
 const MAX_SAMPLES: usize = 256;
 const MAX_CURVES: usize = 6;
 const SAMPLES_VEC4: usize = MAX_SAMPLES / 4;
-
-pub const METRIC_FRAME_TIME_MS: &str = "frame_time_ms";
-pub const METRIC_FPS: &str = "fps";
 
 // Graph scale state (smooth min/max to reduce autoscale jitter)
 #[derive(Resource, Default, Clone, Copy)]
@@ -379,7 +407,7 @@ fn setup_hud(
     let mut graph_row_opt: Option<Entity> = None;
     let mut graph_entity_opt: Option<Entity> = None;
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
-    let mut graph_label_entities: Vec<Entity> = Vec::new();
+    let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
     if s.graph.enabled {
         let mut graph_params = MultiLineGraphParams::default();
         graph_params.length = 0;
@@ -427,8 +455,8 @@ fn setup_hud(
             .id();
         commands.entity(label_container).insert(ChildOf(graph_row));
 
-        // Create two label rows
-        for _ in 0..2usize {
+        // Create label rows matching configured curves
+        for curve in s.graph.curves.iter().take(MAX_CURVES) {
             let eid = commands
                 .spawn((
                     Text::new(""),
@@ -445,7 +473,10 @@ fn setup_hud(
                 ))
                 .id();
             commands.entity(eid).insert(ChildOf(label_container));
-            graph_label_entities.push(eid);
+            graph_labels.push(GraphLabelHandle {
+                metric_id: curve.metric_id.clone(),
+                entity: eid,
+            });
         }
 
         // Graph node
@@ -471,6 +502,7 @@ fn setup_hud(
     let mut bars_root_opt: Option<Entity> = None;
     let mut bar_entities = Vec::new();
     let mut bar_materials = Vec::new();
+    let mut bar_labels = Vec::new();
     if s.bars.enabled && !s.bars.bars.is_empty() {
         let bars_root = commands
             .spawn((Node {
@@ -498,21 +530,7 @@ fn setup_hud(
                 .id();
             commands.entity(row).insert(ChildOf(bars_root));
 
-            // Left label
-            let label = commands
-                .spawn((
-                    Text::new(bar_cfg.label.clone()),
-                    TextColor(Color::WHITE),
-                    Node {
-                        width: Val::Px(48.0),
-                        height: Val::Px(18.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(label).insert(ChildOf(row));
-
-            // Right bar material
+            // Bar material container
             let mat = bar_mats.add(BarMaterial {
                 params: BarParams {
                     value: 0.0,
@@ -530,7 +548,7 @@ fn setup_hud(
                 .spawn((
                     MaterialNode(mat.clone()),
                     Node {
-                        width: Val::Px(s.graph.size.x - 56.0),
+                        width: Val::Px(s.graph.size.x - 12.0),
                         height: Val::Px(16.0),
                         ..default()
                     },
@@ -538,8 +556,28 @@ fn setup_hud(
                 .id();
             commands.entity(bar_entity).insert(ChildOf(row));
 
+            // Overlay label inside bar / 在柱条内部覆写标签
+            let bar_label = commands
+                .spawn((
+                    Text::new(bar_cfg.label.clone()),
+                    TextColor(Color::WHITE),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(6.0),
+                        top: Val::Px(2.0),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(bar_label).insert(ChildOf(bar_entity));
+
             bar_entities.push(bar_entity);
             bar_materials.push(mat);
+            bar_labels.push(bar_label);
         }
     }
 
@@ -548,11 +586,12 @@ fn setup_hud(
         graph_row: graph_row_opt,
         graph_entity: graph_entity_opt,
         graph_material: graph_handle_opt,
-        graph_label_entities,
+        graph_labels,
         graph_label_width: s.graph.label_width.max(40.0),
         bars_root: bars_root_opt,
         bar_entities,
         bar_materials,
+        bar_labels,
     });
 }
 
@@ -715,42 +754,40 @@ fn update_graph_and_bars(
     let current_min = scale_state.min_y;
     let current_max = (scale_state.max_y).max(current_min + 1e-3);
 
-    // Update two left labels: FPS and FrameTimeMs (value + unit)
-    if s.graph.enabled && h.graph_label_entities.len() >= 2 {
-        // Row 1: FPS (integer) value + unit
-        let fps_value = samples.get(METRIC_FPS).unwrap_or(0.0);
-        let fps_text = format!("{:.0} fps", fps_value);
-        if let Ok(mut tx) = label_text_q.get_mut(h.graph_label_entities[0]) {
-            if **tx != fps_text {
-                **tx = fps_text;
-            }
-        }
-        if let Some(cur) = s.graph.curves.iter().find(|c| c.metric_id == METRIC_FPS) {
-            if let Ok(mut col) = label_color_q.get_mut(h.graph_label_entities[0]) {
-                *col = TextColor(cur.color);
-            }
-        }
-        // Use column layout to avoid label overlap
+    // Update graph labels dynamically based on configured curves
+    if s.graph.enabled && !h.graph_labels.is_empty() {
+        for label_handle in &h.graph_labels {
+            let Some(curve) = s
+                .graph
+                .curves
+                .iter()
+                .find(|c| c.metric_id == label_handle.metric_id)
+            else {
+                continue;
+            };
 
-        // Row 2: Frame time (1 decimal) value + unit
-        let frame_time_value = samples.get(METRIC_FRAME_TIME_MS).unwrap_or(0.0);
-        let ft_text = format!("{:.1} ms", frame_time_value);
-        if let Ok(mut tx) = label_text_q.get_mut(h.graph_label_entities[1]) {
-            if **tx != ft_text {
-                **tx = ft_text;
+            let value = samples.get(curve.metric_id.as_str()).unwrap_or(0.0);
+            let precision = curve.unit_precision as usize;
+            let formatted = if precision == 0 {
+                format!("{value:.0}")
+            } else {
+                format!("{value:.precision$}", precision = precision)
+            };
+            let text_value = if curve.unit.is_empty() {
+                formatted
+            } else {
+                format!("{formatted} {}", curve.unit)
+            };
+
+            if let Ok(mut tx) = label_text_q.get_mut(label_handle.entity) {
+                if **tx != text_value {
+                    **tx = text_value.clone();
+                }
+            }
+            if let Ok(mut col) = label_color_q.get_mut(label_handle.entity) {
+                *col = TextColor(curve.color);
             }
         }
-        if let Some(cur) = s
-            .graph
-            .curves
-            .iter()
-            .find(|c| c.metric_id == METRIC_FRAME_TIME_MS)
-        {
-            if let Ok(mut col) = label_color_q.get_mut(h.graph_label_entities[1]) {
-                *col = TextColor(cur.color);
-            }
-        }
-        // Use column layout to avoid label overlap
     }
 
     // Update graph material (when enabled)
@@ -843,6 +880,38 @@ fn update_graph_and_bars(
                 mat.params.bg_g = bg.y;
                 mat.params.bg_b = bg.z;
                 mat.params.bg_a = bg.w;
+            }
+
+            // 在柱条内部刷新文字与颜色 / Update bar label text inside the bar
+            if let Some(&label_entity) = h.bar_labels.get(i) {
+                let maybe_curve = s.graph.curves.iter().find(|c| c.metric_id == cfg.metric_id);
+                let precision = maybe_curve.map(|c| c.unit_precision as usize).unwrap_or(0);
+                let unit = cfg
+                    .unit
+                    .as_deref()
+                    .or(maybe_curve.map(|c| c.unit.as_str()))
+                    .unwrap_or("");
+
+                let formatted = if precision == 0 {
+                    format!("{val:.0}")
+                } else {
+                    format!("{val:.precision$}", precision = precision)
+                };
+                let value_text = if unit.is_empty() {
+                    formatted
+                } else {
+                    format!("{formatted} {unit}")
+                };
+                let display_text = format!("{} {}", cfg.label, value_text);
+
+                if let Ok(mut tx) = label_text_q.get_mut(label_entity) {
+                    if **tx != display_text {
+                        **tx = display_text;
+                    }
+                }
+                if let Ok(mut col) = label_color_q.get_mut(label_entity) {
+                    *col = TextColor(Color::WHITE);
+                }
             }
         }
     }
