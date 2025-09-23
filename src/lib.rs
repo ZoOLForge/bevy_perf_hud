@@ -109,10 +109,12 @@ pub enum PerfKey {
 /// Handles to HUD entities
 #[derive(Resource)]
 pub struct HudHandles {
+    pub graph_row: Option<Entity>,
     pub graph_entity: Option<Entity>,
     pub graph_material: Option<Handle<MultiLineGraphMaterial>>,
     pub graph_label_entities: Vec<Entity>,
     pub graph_label_width: f32,
+    pub bars_root: Option<Entity>,
     pub bar_entities: Vec<Entity>,
     pub bar_materials: Vec<Handle<BarMaterial>>,
 }
@@ -249,8 +251,9 @@ fn setup_hud(
         return;
     }
 
-    // Spawn camera if one doesn't exist (needed for UI rendering)
-    commands.spawn(Camera2d);
+    // UI 2D 相机：设置更高的渲染顺序，确保在 3D 之后渲染，避免与其他相机冲突
+    let ui_cam = commands.spawn(Camera2d).id();
+    commands.entity(ui_cam).insert(Camera { order: 1, ..default() });
 
     // 根 UI 节点
     let root = commands
@@ -263,6 +266,7 @@ fn setup_hud(
         .id();
 
     // 折线图材质与节点（可开关）
+    let mut graph_row_opt: Option<Entity> = None;
     let mut graph_entity_opt: Option<Entity> = None;
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
     let mut graph_label_entities: Vec<Entity> = Vec::new();
@@ -300,6 +304,7 @@ fn setup_hud(
             },))
             .id();
         commands.entity(graph_row).insert(ChildOf(root));
+        graph_row_opt = Some(graph_row);
 
         // 标签容器（纵向排列，避免重叠）
         let label_container = commands
@@ -353,6 +358,7 @@ fn setup_hud(
     }
 
     // 柱状条容器
+    let mut bars_root_opt: Option<Entity> = None;
     let mut bar_entities = Vec::new();
     let mut bar_materials = Vec::new();
     if s.bars.enabled && !s.bars.bars.is_empty() {
@@ -365,6 +371,7 @@ fn setup_hud(
             },))
             .id();
         commands.entity(bars_root).insert(ChildOf(root));
+        bars_root_opt = Some(bars_root);
 
         for bar_cfg in &s.bars.bars {
             // 单条柱状条容器（水平：标签+条）
@@ -428,10 +435,12 @@ fn setup_hud(
 
     // Store handles
     commands.insert_resource(HudHandles {
+        graph_row: graph_row_opt,
         graph_entity: graph_entity_opt,
         graph_material: graph_handle_opt,
         graph_label_entities,
         graph_label_width: s.graph.label_width.max(40.0),
+        bars_root: bars_root_opt,
         bar_entities,
         bar_materials,
     });
