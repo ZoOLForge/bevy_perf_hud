@@ -12,7 +12,7 @@ enum HudMode {
 
 #[derive(Resource, Default)]
 struct CubeState {
-    count: u32, // 已生成立方体总数
+    count: u32, // total number of spawned cubes
 }
 
 #[derive(Component)]
@@ -21,15 +21,15 @@ struct DemoCube;
 #[derive(Component)]
 struct MainCamera;
 
-// 取消 Orbit，相机改为自由飞行控制
+// No orbit: use a free-fly camera
 
 #[derive(Resource)]
 struct SpawnParams {
-    batch: u32,       // 每次生成个数
-    spacing: f32,     // 网格间距
-    jitter_frac: f32, // 相对网格尺寸的抖动比例（0..1）
-    min_dist: f32,    // 生成中心的最小距离（沿前向）
-    max_dist: f32,    // 生成中心的最大距离（沿前向）
+    batch: u32,       // cubes per batch
+    spacing: f32,     // grid spacing
+    jitter_frac: f32, // jitter as a fraction of grid size (0..1)
+    min_dist: f32,    // min center distance along forward
+    max_dist: f32,    // max center distance along forward
 }
 
 impl Default for SpawnParams {
@@ -44,7 +44,7 @@ impl Default for SpawnParams {
     }
 }
 
-// 简单 LCG 伪随机数生成器（避免额外依赖）
+// Simple LCG PRNG (no extra dependencies)
 #[derive(Resource)]
 struct RngState {
     state: u64,
@@ -52,7 +52,7 @@ struct RngState {
 
 impl Default for RngState {
     fn default() -> Self {
-        // 固定种子；如需不同运行产生不同序列，可替换为时间或外部种子
+        // Fixed seed; replace with time-based seed if per-run randomness is needed
         Self {
             state: 0x9E3779B97F4A7C15,
         }
@@ -61,12 +61,12 @@ impl Default for RngState {
 
 impl RngState {
     fn next_u64(&mut self) -> u64 {
-        // 64-bit LCG 常用参数
+        // 64-bit LCG constants
         self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1);
         self.state
     }
     fn next_f32(&mut self) -> f32 {
-        let v = self.next_u64() >> 40; // 取高位，24-bit 精度
+        let v = self.next_u64() >> 40; // high bits, ~24-bit precision
         (v as f32) / ((1u32 << 24) as f32)
     }
     fn range_f32(&mut self, a: f32, b: f32) -> f32 {
@@ -76,9 +76,9 @@ impl RngState {
 
 fn setup_3d(mut commands: Commands) {
     let tf = Transform::from_xyz(-8.0, 8.0, 16.0).looking_at(Vec3::ZERO, Vec3::Y);
-    // 3D 相机
+    // 3D camera
     commands.spawn((Camera3d::default(), tf, MainCamera));
-    // 简单方向光
+    // Directional light
     commands.spawn((
         DirectionalLight {
             illuminance: 12_000.0,
@@ -103,15 +103,15 @@ fn spawn_cube_on_space(
         return;
     }
 
-    // 基于“镜头位置”生成：以相机位置 + 前向 * 距离 为中心，
-    // 在与视线垂直的平面（right/up）上生成一个网格，保证尽量在视野范围内。
+    // Based on camera: center at camera.position + forward * distance,
+    // and lay out a grid on the plane perpendicular to view (right/up) to keep it in view.
     let Some(t) = q_cam.single().ok() else {
         return;
     };
     let fwd = t.forward();
     let right = t.right();
     let up = t.up();
-    // 前向随机距离（由参数控制），避免过近/过远且每批次不同
+    // Random forward distance (configured), to avoid being too near/far and vary per batch
     let mut min_d = spawn.min_dist;
     let mut max_d = spawn.max_dist;
     if max_d < min_d {
@@ -122,13 +122,13 @@ fn spawn_cube_on_space(
     let dist = rng.range_f32(min_d, max_d);
     let center = t.translation + fwd * dist;
 
-    // 网格参数
+    // Grid parameters
     let n = spawn.batch.max(1) as usize;
     let cols = (n as f32).sqrt().ceil() as usize;
     let rows = (n + cols - 1) / cols;
     let sx = spawn.spacing;
 
-    // 平面抖动：以当前批网格的宽高为尺度，随机平移中心，避免多批完全重叠
+    // Planar jitter: randomly offset center within a fraction of grid width/height to avoid overlap
     let grid_w = (cols.max(1) as f32 - 1.0) * sx;
     let grid_h = (rows.max(1) as f32 - 1.0) * sx;
     let j = spawn.jitter_frac.clamp(0.0, 1.0);
@@ -191,7 +191,7 @@ fn adjust_spawn_and_camera_keys(
     mut spawn: ResMut<SpawnParams>,
     mut q_cam: Query<&mut Transform, With<MainCamera>>,
 ) {
-    // 调整批量：[ 减少, ] 增加；按住 Shift 为大步长
+    // Adjust batch size: [ decrease, ] increase; hold Shift for larger step
     let big = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let step = if big { 50 } else { 10 };
     if keys.just_pressed(KeyCode::BracketLeft) {
@@ -203,22 +203,22 @@ fn adjust_spawn_and_camera_keys(
         println!("batch -> {}", spawn.batch);
     }
 
-    // 自由飞行相机控制
+    // Free-fly camera controls
     let mut tf = match q_cam.single_mut() {
         Ok(t) => t,
         Err(_) => return,
     };
     let boost = if big { 3.0 } else { 1.0 };
-    let move_step = 0.4 * boost; // 单帧位移
+    let move_step = 0.4 * boost; // per-frame translation step
     let yaw_step = 0.06 * boost;
     let pitch_step = 0.04 * boost;
 
-    // 先取方向向量，避免在可变借用期间再对 tf 不可变借用（借用冲突 E0502）
+    // Capture direction vectors first to avoid E0502 borrow conflicts
     let fwd = tf.forward();
     let right = tf.right();
     let up = Vec3::Y;
 
-    // 平移：W/S 前后，A/D 左右，Q/E 下/上
+    // Translate: W/S forward/back, A/D left/right, Q/E down/up
     if keys.pressed(KeyCode::KeyW) {
         tf.translation += fwd * move_step;
     }
@@ -238,7 +238,7 @@ fn adjust_spawn_and_camera_keys(
         tf.translation += up * move_step;
     }
 
-    // 旋转：方向键 左右=偏航，上下=俯仰
+    // Rotate: arrows left/right = yaw, up/down = pitch
     if keys.pressed(KeyCode::ArrowLeft) {
         tf.rotate_y(yaw_step);
     }
@@ -268,7 +268,7 @@ fn toggle_hud_mode_on_f1(
 
     match *mode {
         HudMode::Full => {
-            // 下一态：只显示 Graph
+            // Next state: graph only
             if let Some(e) = h.graph_row {
                 commands.entity(e).insert(Visibility::Visible);
             }
@@ -278,7 +278,7 @@ fn toggle_hud_mode_on_f1(
             *mode = HudMode::GraphOnly;
         }
         HudMode::GraphOnly => {
-            // 下一态：全隐藏
+            // Next state: hidden
             if let Some(e) = h.graph_row {
                 commands.entity(e).insert(Visibility::Hidden);
             }
@@ -288,7 +288,7 @@ fn toggle_hud_mode_on_f1(
             *mode = HudMode::Hidden;
         }
         HudMode::Hidden => {
-            // 下一态：全显示
+            // Next state: full
             if let Some(e) = h.graph_row {
                 commands.entity(e).insert(Visibility::Visible);
             }
@@ -327,7 +327,7 @@ fn main() {
                     right: false,
                     top: false,
                 },
-                // Y 轴比例控制：包含 0、最小跨度与边距、步进量化与平滑
+                // Y-axis scale control: include zero, min span, margins, step quantization and smoothing
                 y_include_zero: true,
                 y_min_span: 5.0,
                 y_margin_frac: 0.10,

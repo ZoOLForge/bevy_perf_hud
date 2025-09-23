@@ -15,7 +15,7 @@ pub struct BevyPerfHudPlugin;
 impl Plugin for BevyPerfHudPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(FrameTimeDiagnosticsPlugin::default())
-            // 注册 UI 材质（图表与柱状条）
+            // Register UI materials (graph and bar)
             .add_plugins(UiMaterialPlugin::<MultiLineGraphMaterial>::default())
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
             .init_resource::<SampledValues>()
@@ -40,28 +40,28 @@ pub struct PerfHudSettings {
 pub struct GraphSettings {
     pub enabled: bool,
     pub size: Vec2,
-    pub label_width: f32, // 左侧标签宽度（像素）
+    pub label_width: f32, // Left label width (pixels)
     pub min_y: f32,
     pub max_y: f32,
     pub thickness: f32,
     pub curves: Vec<CurveConfig>,
-    pub bg_color: Color, // 图表背景颜色（含透明度）
-    // 边框配置（集中管理）
+    pub bg_color: Color, // Graph background color (with alpha)
+    // Border configuration
     pub border: GraphBorder,
-    // Y 轴刻度数量（>=2）。单位与精度改为按曲线配置
+    // Y-axis tick count (>=2). Unit/precision handled per curve
     pub y_ticks: u32,
-    // Y 轴比例控制
-    pub y_include_zero: bool,   // 是否强制包含 0
-    pub y_min_span: f32,        // 最小跨度，避免范围过小
-    pub y_margin_frac: f32,     // 上下边距比例（0..0.45）
-    pub y_step_quantize: f32,   // Y 轴步进量（>0 时对 min/max 量化到步进倍数）
-    pub y_scale_smoothing: f32, // 比例平滑系数（0..1）
+    // Y-axis scale controls
+    pub y_include_zero: bool,   // Force include 0
+    pub y_min_span: f32,        // Minimum span to avoid tiny ranges
+    pub y_margin_frac: f32,     // Vertical margin fraction (0..0.45)
+    pub y_step_quantize: f32,   // Quantize min/max to step when > 0
+    pub y_scale_smoothing: f32, // Scale smoothing factor (0..1)
 }
 
 #[derive(Clone)]
 pub struct GraphBorder {
-    pub color: Color,   // 颜色（含透明度）
-    pub thickness: f32, // 厚度（像素）
+    pub color: Color,   // Color (with alpha)
+    pub thickness: f32, // Thickness (pixels)
     pub left: bool,
     pub bottom: bool,
     pub right: bool,
@@ -73,7 +73,7 @@ pub struct GraphBorder {
 pub struct BarsSettings {
     pub enabled: bool,
     pub bars: Vec<BarConfig>,
-    pub bg_color: Color, // 柱状条背景颜色（含透明度）
+    pub bg_color: Color, // Bar background color (with alpha)
 }
 
 /// Configuration for a performance curve
@@ -82,10 +82,10 @@ pub struct CurveConfig {
     pub key: PerfKey,
     pub color: Color,
     pub autoscale: bool,
-    pub smoothing: f32,      // 0..1, 指数平滑系数，0=不滤波，1=完全跟随新值
-    pub quantize_step: f32,  // >0 启用取整（按步进量四舍五入到最接近的倍数）
-    pub unit: String,        // 单位（例如 "ms"、"fps"）
-    pub unit_precision: u32, // 数值小数位数
+    pub smoothing: f32,      // 0..1 exponential smoothing; 0=no filter, 1=follow new value
+    pub quantize_step: f32,  // >0 rounds to nearest multiple of this step
+    pub unit: String,        // Unit (e.g., "ms", "fps")
+    pub unit_precision: u32, // Decimal precision
 }
 
 /// Configuration for a performance bar
@@ -129,11 +129,11 @@ pub struct SampledValues {
     pub net_load: f32,
 }
 
-// 历史采样缓冲
+// History sample buffers
 #[derive(Resource)]
 pub struct HistoryBuffers {
     pub values: [[f32; MAX_SAMPLES]; MAX_CURVES],
-    pub length: u32, // 有效长度（<= MAX_SAMPLES）
+    pub length: u32, // Valid length (<= MAX_SAMPLES)
 }
 
 impl Default for HistoryBuffers {
@@ -149,14 +149,14 @@ const MAX_SAMPLES: usize = 256;
 const MAX_CURVES: usize = 6;
 const SAMPLES_VEC4: usize = MAX_SAMPLES / 4;
 
-// 图表比例状态（为避免 autoscale 抖动，对 min/max 做平滑）
+// Graph scale state (smooth min/max to reduce autoscale jitter)
 #[derive(Resource, Default, Clone, Copy)]
 pub struct GraphScaleState {
     pub min_y: f32,
     pub max_y: f32,
 }
 
-// UI 材质：折线图
+// UI material: multi-line graph
 #[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
 pub struct MultiLineGraphMaterial {
     #[uniform(0)]
@@ -212,7 +212,7 @@ impl Default for MultiLineGraphParams {
     }
 }
 
-// UI 材质：水平填充柱条
+// UI material: horizontal fill bar
 #[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
 pub struct BarMaterial {
     #[uniform(0)]
@@ -251,11 +251,11 @@ fn setup_hud(
         return;
     }
 
-    // UI 2D 相机：设置更高的渲染顺序，确保在 3D 之后渲染，避免与其他相机冲突
+    // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
     commands.entity(ui_cam).insert(Camera { order: 1, ..default() });
 
-    // 根 UI 节点
+    // Root UI node
     let root = commands
         .spawn((Node {
             position_type: PositionType::Absolute,
@@ -265,7 +265,7 @@ fn setup_hud(
         },))
         .id();
 
-    // 折线图材质与节点（可开关）
+    // Graph material and node (optional)
     let mut graph_row_opt: Option<Entity> = None;
     let mut graph_entity_opt: Option<Entity> = None;
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
@@ -288,12 +288,12 @@ fn setup_hud(
         graph_params.border_right = if s.graph.border.right { 1 } else { 0 };
         graph_params.border_top = if s.graph.border.top { 1 } else { 0 };
         graph_params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
-        // 颜色写入
+        // Write curve colors
         for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
             let v = c.color.to_linear().to_vec4();
             graph_params.colors[i] = v;
         }
-        // 行容器：左侧标签 + 右侧图表
+        // Row container: left labels + right graph
         let label_width = s.graph.label_width.max(40.0);
         let graph_row = commands
             .spawn((Node {
@@ -306,7 +306,7 @@ fn setup_hud(
         commands.entity(graph_row).insert(ChildOf(root));
         graph_row_opt = Some(graph_row);
 
-        // 标签容器（纵向排列，避免重叠）
+        // Label container (vertical to avoid overlap)
         let label_container = commands
             .spawn((Node {
                 width: Val::Px(label_width),
@@ -317,7 +317,7 @@ fn setup_hud(
             .id();
         commands.entity(label_container).insert(ChildOf(graph_row));
 
-        // 生成两行标签
+        // Create two label rows
         for _ in 0..2usize {
             let eid = commands
                 .spawn((
@@ -338,7 +338,7 @@ fn setup_hud(
             graph_label_entities.push(eid);
         }
 
-        // 图表节点
+        // Graph node
         let gh = graph_mats.add(MultiLineGraphMaterial {
             params: graph_params,
         });
@@ -357,7 +357,7 @@ fn setup_hud(
         graph_handle_opt = Some(gh);
     }
 
-    // 柱状条容器
+    // Bars container
     let mut bars_root_opt: Option<Entity> = None;
     let mut bar_entities = Vec::new();
     let mut bar_materials = Vec::new();
@@ -374,7 +374,7 @@ fn setup_hud(
         bars_root_opt = Some(bars_root);
 
         for bar_cfg in &s.bars.bars {
-            // 单条柱状条容器（水平：标签+条）
+            // Single bar row (label + bar)
             let row = commands
                 .spawn((Node {
                     width: Val::Px(s.graph.size.x),
@@ -388,7 +388,7 @@ fn setup_hud(
                 .id();
             commands.entity(row).insert(ChildOf(bars_root));
 
-            // 左侧标签
+            // Left label
             let label = commands
                 .spawn((
                     Text::new(bar_cfg.label.clone()),
@@ -402,7 +402,7 @@ fn setup_hud(
                 .id();
             commands.entity(label).insert(ChildOf(row));
 
-            // 右侧条形材质
+            // Right bar material
             let mat = bar_mats.add(BarMaterial {
                 params: BarParams {
                     value: 0.0,
@@ -503,7 +503,7 @@ fn update_graph_and_bars(
         return;
     };
 
-    // 采样映射 -> 指数平滑 -> 取整（按步进）
+    // Sample mapping -> exponential smoothing -> quantization
     let mut filtered_values = [0.0_f32; MAX_CURVES];
     for (i, cfg) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
         let raw = match cfg.key {
@@ -514,7 +514,7 @@ fn update_graph_and_bars(
             PerfKey::NetLoad => samples.net_load,
         };
         let alpha = cfg.smoothing.clamp(0.0, 1.0);
-        // 取上一帧末尾值作为 prev（在移位前读取）
+        // Use the last value as prev (read before shifting)
         let prev = if history.length == 0 {
             raw
         } else if (history.length as usize) < MAX_SAMPLES {
@@ -523,7 +523,7 @@ fn update_graph_and_bars(
             history.values[i][MAX_SAMPLES - 1]
         };
         let smoothed = prev + (raw - prev) * alpha;
-        // 取整：按步进量四舍五入到最近倍数；步进<=0 则不取整
+        // Quantize: round to nearest multiple; disabled when step <= 0
         let step = cfg.quantize_step;
         filtered_values[i] = if step > 0.0 {
             (smoothed / step).round() * step
@@ -532,23 +532,23 @@ fn update_graph_and_bars(
         };
     }
 
-    // 推入历史（右移，追加在末尾）
+    // Push into history (shift-right/append)
     if (history.length as usize) < MAX_SAMPLES {
-        // 直接填充到下一个索引
+        // Fill the next index directly
         let idx = history.length as usize;
         for i in 0..MAX_CURVES {
             history.values[i][idx] = filtered_values[i];
         }
         history.length += 1;
     } else {
-        // 滑动窗口：整体左移一格
+        // Sliding window: shift left by one
         for i in 0..MAX_CURVES {
             history.values[i].copy_within(1..MAX_SAMPLES, 0);
             history.values[i][MAX_SAMPLES - 1] = filtered_values[i];
         }
     }
 
-    // 计算目标 Y 比例（autoscale 或固定）并应用平滑/量化
+    // Compute target Y scale (autoscale or fixed), then smooth/quantize
     let mut target_min = s.graph.min_y;
     let mut target_max = s.graph.max_y;
     if s.graph.curves.iter().any(|c| c.autoscale) && history.length > 0 {
@@ -583,21 +583,21 @@ fn update_graph_and_bars(
         target_max = mid + 0.5 * span;
     }
 
-    // 边距
+    // Margins
     let margin_frac = s.graph.y_margin_frac.clamp(0.0, 0.45);
     let margin = span * margin_frac;
     target_min -= margin;
     target_max += margin;
     span = (target_max - target_min).max(1e-3);
 
-    // 步进量化
+    // Step quantization
     if s.graph.y_step_quantize > 0.0 {
         let step = s.graph.y_step_quantize;
         target_min = (target_min / step).floor() * step;
         target_max = (target_max / step).ceil() * step;
     }
 
-    // 平滑
+    // Smoothing
     let a = s.graph.y_scale_smoothing.clamp(0.0, 1.0);
     if scale_state.max_y <= scale_state.min_y {
         scale_state.min_y = target_min;
@@ -610,9 +610,9 @@ fn update_graph_and_bars(
     let current_min = scale_state.min_y;
     let current_max = (scale_state.max_y).max(current_min + 1e-3);
 
-    // 更新左侧标签为两行：FPS 与 FrameTimeMs（数值+单位）
+    // Update two left labels: FPS and FrameTimeMs (value + unit)
     if s.graph.enabled && h.graph_label_entities.len() >= 2 {
-        // 行1：FPS（取整） 显示“数值 + 单位”
+        // Row 1: FPS (integer) value + unit
         let fps_text = format!("{:.0} fps", samples.fps);
         if let Ok(mut tx) = label_text_q.get_mut(h.graph_label_entities[0]) {
             if **tx != fps_text {
@@ -629,9 +629,9 @@ fn update_graph_and_bars(
                 *col = TextColor(cur.color);
             }
         }
-        // 使用列布局，避免绝对定位重叠
+        // Use column layout to avoid label overlap
 
-        // 行2：Frame Time（1位小数） 显示“数值 + 单位”
+        // Row 2: Frame time (1 decimal) value + unit
         let ft_text = format!("{:.1} ms", samples.frame_time_ms);
         if let Ok(mut tx) = label_text_q.get_mut(h.graph_label_entities[1]) {
             if **tx != ft_text {
@@ -648,10 +648,10 @@ fn update_graph_and_bars(
                 *col = TextColor(cur.color);
             }
         }
-        // 使用列布局，避免绝对定位重叠
+        // Use column layout to avoid label overlap
     }
 
-    // 更新折线图材质（仅在启用）
+    // Update graph material (when enabled)
     if s.graph.enabled {
         if let Some(handle) = &h.graph_material {
             if let Some(mat) = graph_mats.get_mut(handle) {
@@ -671,13 +671,13 @@ fn update_graph_and_bars(
                 mat.params.border_right = if s.graph.border.right { 1 } else { 0 };
                 mat.params.border_top = if s.graph.border.top { 1 } else { 0 };
                 mat.params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
-                // 每帧同步曲线颜色，确保可独立配置/热更新
+                // Sync curve colors every frame to allow hot updates
                 for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
                     mat.params.colors[i] = c.color.to_linear().to_vec4();
                 }
-                // 写入值（打包为 vec4）
+                // Write values (pack into vec4)
                 let len = MAX_SAMPLES.min(history.length as usize);
-                let packed_len = (len + 3) / 4; // 向上取整
+                let packed_len = (len + 3) / 4; // round up
                 for i in 0..MAX_CURVES {
                     for j in 0..SAMPLES_VEC4 {
                         let base = j * 4;
@@ -703,17 +703,17 @@ fn update_graph_and_bars(
                         };
                         mat.params.values[i][j] = Vec4::new(x0, x1, x2, x3);
                     }
-                    // 可选：若想清理未使用段，可在 packed_len..SAMPLES_VEC4 置零
+                    // Optional: zero unused segments packed_len..SAMPLES_VEC4
                     for j in packed_len..SAMPLES_VEC4 {
                         mat.params.values[i][j] = Vec4::ZERO;
                     }
                 }
-                // 颜色已在初始化时写入，若配置改变可在此更新
+                // Colors set at init; update here if config changed
             }
         }
     }
 
-    // 更新柱状条（仅在启用）
+    // Update bars (when enabled)
     if s.bars.enabled {
         for (i, cfg) in s.bars.bars.iter().enumerate() {
             if i >= h.bar_materials.len() {
@@ -726,7 +726,7 @@ fn update_graph_and_bars(
                 PerfKey::GpuLoad => samples.gpu_load,
                 PerfKey::NetLoad => samples.net_load,
             };
-            // 归一化：在当前比例 current_min..current_max 映射到 0..1
+            // Normalize: map current_min..current_max to 0..1
             let norm = if current_max > current_min {
                 ((val - current_min) / (current_max - current_min)).clamp(0.0, 1.0)
             } else {
