@@ -11,6 +11,14 @@ struct MultiLineGraphParams {
   max_y: f32,
   thickness: f32,
   bg_color: vec4<f32>,
+  border_color: vec4<f32>,
+  border_thickness: f32,
+  border_thickness_uv_x: f32,
+  border_thickness_uv_y: f32,
+  border_left: u32,
+  border_bottom: u32,
+  border_right: u32,
+  border_top: u32,
   colors: array<vec4<f32>, 6u>,
   curve_count: u32,
 }
@@ -32,7 +40,9 @@ fn lane(v: vec4<f32>, i: u32) -> f32 {
 
 @fragment
 fn fragment(in: VSOut) -> @location(0) vec4<f32> {
-  let uv = clamp(in.uv, vec2<f32>(0.0), vec2<f32>(1.0));
+  // Flip Y so that y=0 is bottom, y=1 is top (UI uv is usually top-left origin)
+  let uv0 = clamp(in.uv, vec2<f32>(0.0), vec2<f32>(1.0));
+  let uv = vec2<f32>(uv0.x, 1.0 - uv0.y);
   let len = max(P.length, 1u);
   let x = uv.x * f32(len - 1u);
   let i0 = u32(floor(x));
@@ -70,7 +80,18 @@ fn fragment(in: VSOut) -> @location(0) vec4<f32> {
       out_rgb = P.colors[c].rgb;
     }
   }
-  let final_rgb = mix(P.bg_color.rgb, out_rgb, best_alpha);
-  let final_a = 1.0 - (1.0 - P.bg_color.a) * (1.0 - best_alpha);
-  return vec4<f32>(final_rgb, final_a);
+  var comp_rgb = mix(P.bg_color.rgb, out_rgb, best_alpha);
+  var comp_a = 1.0 - (1.0 - P.bg_color.a) * (1.0 - best_alpha);
+
+  // Border overlay (left x=0, bottom y=0)
+  let btx = P.border_thickness_uv_x;
+  let bty = P.border_thickness_uv_y;
+  let left_alpha = select(0.0, smoothstep(btx*1.2, btx*0.6, uv.x), P.border_left == 1u);
+  let bottom_alpha = select(0.0, smoothstep(bty*1.2, bty*0.6, uv.y), P.border_bottom == 1u);
+  let right_alpha = select(0.0, smoothstep(btx*1.2, btx*0.6, 1.0 - uv.x), P.border_right == 1u);
+  let top_alpha = select(0.0, smoothstep(bty*1.2, bty*0.6, 1.0 - uv.y), P.border_top == 1u);
+  let b_alpha = max(max(left_alpha, bottom_alpha), max(right_alpha, top_alpha)) * P.border_color.a;
+  comp_rgb = mix(comp_rgb, P.border_color.rgb, b_alpha);
+  comp_a = 1.0 - (1.0 - comp_a) * (1.0 - b_alpha);
+  return vec4<f32>(comp_rgb, comp_a);
 }

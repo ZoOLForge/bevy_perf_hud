@@ -15,6 +15,14 @@ fn main() {
                 max_y: 30.0,
                 thickness: 0.012,
                 bg_color: Color::srgba(0.0, 0.0, 0.0, 0.25),
+                border: bevy_perf_hud::GraphBorder {
+                    color: Color::srgba(1.0, 1.0, 1.0, 1.0),
+                    thickness: 2.0,
+                    left: true,
+                    bottom: true,
+                    right: false,
+                    top: false,
+                },
                 // Y 轴比例控制：包含 0、最小跨度与边距、步进量化与平滑
                 y_include_zero: true,
                 y_min_span: 5.0,
