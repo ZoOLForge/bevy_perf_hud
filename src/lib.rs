@@ -52,6 +52,7 @@ pub struct GraphSettings {
     pub max_y: f32,
     pub thickness: f32,
     pub curves: Vec<CurveConfig>,
+    pub bg_color: Color, // 图表背景颜色（含透明度）
     // Y 轴比例控制
     pub y_include_zero: bool,    // 是否强制包含 0
     pub y_min_span: f32,         // 最小跨度，避免范围过小
@@ -65,6 +66,7 @@ pub struct GraphSettings {
 pub struct BarsSettings {
     pub enabled: bool,
     pub bars: Vec<BarConfig>,
+    pub bg_alpha: f32, // 柱状条背景透明度（0..1）
 }
 
 /// Configuration for a performance curve
@@ -162,6 +164,7 @@ pub struct MultiLineGraphParams {
     pub min_y: f32,
     pub max_y: f32,
     pub thickness: f32,
+    pub bg_color: Vec4,
     pub colors: [Vec4; MAX_CURVES],
     pub curve_count: u32,
 }
@@ -174,6 +177,7 @@ impl Default for MultiLineGraphParams {
             min_y: 0.0,
             max_y: 1.0,
             thickness: 0.01,
+            bg_color: Vec4::ZERO,
             colors: [Vec4::ZERO; MAX_CURVES],
             curve_count: 0,
         }
@@ -249,13 +253,14 @@ fn setup_hud(
     // 折线图材质与节点（可开关）
     let mut graph_entity_opt: Option<Entity> = None;
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
-    if s.graph.enabled {
+        if s.graph.enabled {
         let mut graph_params = MultiLineGraphParams::default();
-        graph_params.length = 0;
-        graph_params.min_y = s.graph.min_y;
-        graph_params.max_y = s.graph.max_y;
+            graph_params.length = 0;
+            graph_params.min_y = s.graph.min_y;
+            graph_params.max_y = s.graph.max_y;
         graph_params.thickness = s.graph.thickness;
-        graph_params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
+        graph_params.bg_color = s.graph.bg_color.to_linear().to_vec4();
+            graph_params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
         // 颜色写入
         for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
             let v = c.color.to_linear().to_vec4();
@@ -324,7 +329,7 @@ fn setup_hud(
                     bg_r: 0.12,
                     bg_g: 0.12,
                     bg_b: 0.12,
-                    bg_a: 1.0,
+                    bg_a: s.bars.bg_alpha,
                 },
             });
             let bar_entity = commands
@@ -550,6 +555,7 @@ fn update_graph_and_bars(
             mat.params.min_y = current_min;
             mat.params.max_y = current_max;
             mat.params.thickness = s.graph.thickness;
+            mat.params.bg_color = s.graph.bg_color.to_linear().to_vec4();
             mat.params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
             // 每帧同步曲线颜色，确保可独立配置/热更新
             for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
@@ -612,16 +618,17 @@ fn update_graph_and_bars(
         } else {
             0.0
         };
-        if let Some(mat) = bar_mats.get_mut(&h.bar_materials[i]) {
-            mat.params.value = norm;
-            let v = cfg.color.to_linear().to_vec4();
-            mat.params.r = v.x;
-            mat.params.g = v.y;
-            mat.params.b = v.z;
-            mat.params.a = v.w;
+            if let Some(mat) = bar_mats.get_mut(&h.bar_materials[i]) {
+                mat.params.value = norm;
+                let v = cfg.color.to_linear().to_vec4();
+                mat.params.r = v.x;
+                mat.params.g = v.y;
+                mat.params.b = v.z;
+                mat.params.a = v.w;
+                mat.params.bg_a = s.bars.bg_alpha;
+            }
         }
     }
-}
 }
 
 // Re-export helper API

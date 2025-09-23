@@ -10,6 +10,7 @@ struct MultiLineGraphParams {
   min_y: f32,
   max_y: f32,
   thickness: f32,
+  bg_color: vec4<f32>,
   colors: array<vec4<f32>, 6u>,
   curve_count: u32,
 }
@@ -69,5 +70,7 @@ fn fragment(in: VSOut) -> @location(0) vec4<f32> {
       out_rgb = P.colors[c].rgb;
     }
   }
-  return vec4<f32>(out_rgb, best_alpha);
+  let final_rgb = mix(P.bg_color.rgb, out_rgb, best_alpha);
+  let final_a = 1.0 - (1.0 - P.bg_color.a) * (1.0 - best_alpha);
+  return vec4<f32>(final_rgb, final_a);
 }
