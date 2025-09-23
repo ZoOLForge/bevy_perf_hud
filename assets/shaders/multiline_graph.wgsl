@@ -39,7 +39,8 @@ fn fragment(in: VSOut) -> @location(0) vec4<f32> {
   let t = fract(x);
 
 
-  var out_color = vec4<f32>(0.0);
+  var best_alpha = 0.0;
+  var out_rgb = vec3<f32>(0.0);
   for (var c: u32 = 0u; c < P.curve_count; c = c + 1u) {
     let j0 = i0 / PACK;
     let l0 = i0 % PACK;
@@ -62,7 +63,11 @@ fn fragment(in: VSOut) -> @location(0) vec4<f32> {
     let closest = p0 + seg * tseg;
     let d = distance(uv, closest);
     let alpha = smoothstep(P.thickness*1.2, P.thickness*0.6, d);
-    out_color += vec4<f32>(P.colors[c].rgb, alpha * P.colors[c].a);
+    let ca = alpha * P.colors[c].a;
+    if (ca > best_alpha) {
+      best_alpha = ca;
+      out_rgb = P.colors[c].rgb;
+    }
   }
-  return out_color;
+  return vec4<f32>(out_rgb, best_alpha);
 }
