@@ -1,0 +1,42 @@
+[package]
+name = "bevy_perf_hud"
+description = "A simple HTTP client for Bevy"
+version = "0.1.0"
+edition = "2024"
+readme = "README.md"
+homepage = "https://crates.io/crates/bevy_perf_hud"
+documentation = "https://docs.rs/bevy_perf_hud"
+repository = "https://github.com/foxzool/bevy_perf_hud"
+authors = ["FoxZoOL <zhooul@gmail.com>"]
+license = "MIT OR Apache-2.0"
+keywords = ["bevy", "metric", "plugin", "wasm"]
+exclude = ["/examples/*", "/tests/*", "assets/*"]
+
+
+[dependencies]
+bevy = { version = "0.16.1", default-features = false, features = [
+    "animation",
+    "bevy_asset",
+    "bevy_gilrs",
+    "bevy_scene",
+    "bevy_winit",
+    "bevy_core_pipeline",
+    "bevy_pbr",
+    "bevy_gltf",
+    "bevy_render",
+    "bevy_sprite",
+    "bevy_text",
+    "bevy_ui",
+    "bevy_window",
+    "bevy_log",
+    "multi_threaded",
+    "zstd",
+    "png",
+    "hdr",
+    "x11",
+    "bevy_gizmos",
+    "tonemapping_luts",
+    "default_font",
+    "webgl2",
+    "sysinfo_plugin",
+] }
