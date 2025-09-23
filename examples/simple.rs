@@ -1,6 +1,9 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BevyPerfHudPlugin, CurveConfig, HudHandles, PerfKey, Settings};
+use bevy_perf_hud::{
+    BarConfig, BevyPerfHudPlugin, CurveConfig, HudHandles, METRIC_FPS, METRIC_FRAME_TIME_MS,
+    Settings,
+};
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
 enum HudMode {
@@ -335,7 +338,7 @@ fn main() {
                 y_scale_smoothing: 0.3,
                 curves: vec![
                     CurveConfig {
-                        key: PerfKey::FrameTimeMs,
+                        metric_id: METRIC_FRAME_TIME_MS.into(),
                         color: Color::srgb(0.0, 1.0, 0.0),
                         autoscale: true,
                         smoothing: 0.25,
@@ -344,7 +347,7 @@ fn main() {
                         unit_precision: 1,
                     },
                     CurveConfig {
-                        key: PerfKey::Fps,
+                        metric_id: METRIC_FPS.into(),
                         color: Color::srgb(0.9, 0.0, 0.0),
                         autoscale: true,
                         smoothing: 0.2,
@@ -355,23 +358,18 @@ fn main() {
                 ],
             },
             bars: bevy_perf_hud::BarsSettings {
-                enabled: true,
+                enabled: false,
                 bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
                 bars: vec![
                     BarConfig {
-                        key: PerfKey::CpuLoad,
-                        label: "CPU".into(),
+                        metric_id: METRIC_FRAME_TIME_MS.into(),
+                        label: "Frame".into(),
                         color: Color::srgb(1.0, 0.3, 0.0),
                     },
                     BarConfig {
-                        key: PerfKey::GpuLoad,
-                        label: "GPU".into(),
+                        metric_id: METRIC_FPS.into(),
+                        label: "FPS".into(),
                         color: Color::srgb(0.0, 0.0, 1.0),
-                    },
-                    BarConfig {
-                        key: PerfKey::NetLoad,
-                        label: "NET".into(),
-                        color: Color::srgb(0.0, 1.0, 0.0),
                     },
                 ],
             },

@@ -7,6 +7,7 @@ use bevy::{
         FlexDirection, MaterialNode, Node, PositionType, UiMaterial, UiMaterialPlugin, UiRect, Val,
     },
 };
+use std::collections::HashMap;
 
 /// Plugin for displaying performance HUD
 #[derive(Default)]
@@ -19,10 +20,15 @@ impl Plugin for BevyPerfHudPlugin {
             .add_plugins(UiMaterialPlugin::<MultiLineGraphMaterial>::default())
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
             .init_resource::<SampledValues>()
+            .init_resource::<MetricProviders>()
             .init_resource::<HistoryBuffers>()
             .init_resource::<GraphScaleState>()
             .add_systems(Startup, setup_hud)
             .add_systems(Update, (sample_diagnostics, update_graph_and_bars).chain());
+
+        app.world_mut()
+            .resource_mut::<MetricProviders>()
+            .ensure_default_entries();
     }
 }
 
@@ -79,31 +85,21 @@ pub struct BarsSettings {
 /// Configuration for a performance curve
 #[derive(Clone)]
 pub struct CurveConfig {
-    pub key: PerfKey,
+    pub metric_id: String,
     pub color: Color,
     pub autoscale: bool,
-    pub smoothing: f32,      // 0..1 exponential smoothing; 0=no filter, 1=follow new value
-    pub quantize_step: f32,  // >0 rounds to nearest multiple of this step
-    pub unit: String,        // Unit (e.g., "ms", "fps")
+    pub smoothing: f32, // 0..1 exponential smoothing; 0=no filter, 1=follow new value
+    pub quantize_step: f32, // >0 rounds to nearest multiple of this step
+    pub unit: String,   // Unit (e.g., "ms", "fps")
     pub unit_precision: u32, // Decimal precision
 }
 
 /// Configuration for a performance bar
 #[derive(Clone)]
 pub struct BarConfig {
-    pub key: PerfKey,
+    pub metric_id: String,
     pub label: String,
     pub color: Color,
-}
-
-/// Performance metrics keys
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum PerfKey {
-    FrameTimeMs,
-    Fps,
-    CpuLoad,
-    GpuLoad,
-    NetLoad,
 }
 
 /// Handles to HUD entities
@@ -122,11 +118,119 @@ pub struct HudHandles {
 /// Sampled performance values
 #[derive(Resource, Default)]
 pub struct SampledValues {
-    pub frame_time_ms: f32,
-    pub fps: f32,
-    pub cpu_load: f32,
-    pub gpu_load: f32,
-    pub net_load: f32,
+    values: HashMap<String, f32>,
+}
+
+impl SampledValues {
+    /// 设置性能指标值 / Set performance metric value
+    pub fn set(&mut self, id: &str, value: f32) {
+        if let Some(existing) = self.values.get_mut(id) {
+            *existing = value;
+        } else {
+            self.values.insert(id.to_owned(), value);
+        }
+    }
+
+    /// 获取指标的当前值 / Fetch current value of a metric
+    pub fn get(&self, id: &str) -> Option<f32> {
+        self.values.get(id).copied()
+    }
+}
+
+/// 性能度量采样上下文 / Metric sampling context
+#[derive(Clone, Copy)]
+pub struct MetricSampleContext<'a> {
+    pub diagnostics: Option<&'a DiagnosticsStore>,
+}
+
+/// 性能度量提供者约定 / Trait for performance metric providers
+pub trait PerfMetricProvider: Send + Sync + 'static {
+    fn metric_id(&self) -> &str;
+    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32>;
+}
+
+/// 性能度量提供者集合 / Registry for metric providers
+#[derive(Resource, Default)]
+pub struct MetricProviders {
+    providers: Vec<Box<dyn PerfMetricProvider>>,
+}
+
+impl MetricProviders {
+    /// 添加一个新的度量提供者 / Register a new provider
+    pub fn add_provider<P: PerfMetricProvider>(&mut self, provider: P) {
+        self.providers.push(Box::new(provider));
+    }
+
+    /// 检查是否已存在指定键值 / Detect if a provider for the key exists
+    pub fn contains(&self, id: &str) -> bool {
+        self.providers.iter().any(|p| p.metric_id() == id)
+    }
+
+    /// 确保内置度量可用 / Ensure built-in metrics are registered
+    pub fn ensure_default_entries(&mut self) {
+        if !self.contains(METRIC_FPS) {
+            self.add_provider(FpsMetricProvider::default());
+        }
+        if !self.contains(METRIC_FRAME_TIME_MS) {
+            self.add_provider(FrameTimeMetricProvider::default());
+        }
+    }
+
+    /// 迭代所有提供者 / Iterate through all providers
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut dyn PerfMetricProvider> {
+        self.providers.iter_mut().map(|p| p.as_mut())
+    }
+}
+
+/// App 扩展方法 / App extension methods
+pub trait PerfHudAppExt {
+    fn add_perf_metric_provider<P: PerfMetricProvider>(&mut self, provider: P) -> &mut Self;
+}
+
+impl PerfHudAppExt for App {
+    fn add_perf_metric_provider<P: PerfMetricProvider>(&mut self, provider: P) -> &mut Self {
+        self.init_resource::<MetricProviders>();
+        self.world_mut()
+            .resource_mut::<MetricProviders>()
+            .add_provider(provider);
+        self
+    }
+}
+
+/// FPS 提供者 / FPS metric provider
+#[derive(Default)]
+pub struct FpsMetricProvider;
+
+impl PerfMetricProvider for FpsMetricProvider {
+    fn metric_id(&self) -> &str {
+        METRIC_FPS
+    }
+
+    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
+        let diagnostics = ctx.diagnostics?;
+        let fps = diagnostics
+            .get(&FrameTimeDiagnosticsPlugin::FPS)?
+            .average()?;
+        Some(fps.floor() as f32)
+    }
+}
+
+/// 帧时间提供者 / Frame time metric provider
+#[derive(Default)]
+pub struct FrameTimeMetricProvider;
+
+impl PerfMetricProvider for FrameTimeMetricProvider {
+    fn metric_id(&self) -> &str {
+        METRIC_FRAME_TIME_MS
+    }
+
+    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
+        let diagnostics = ctx.diagnostics?;
+        let frame_time = diagnostics
+            .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)?
+            .smoothed()?;
+        Some(frame_time.floor() as f32)
+    }
 }
 
 // History sample buffers
@@ -148,6 +252,9 @@ impl Default for HistoryBuffers {
 const MAX_SAMPLES: usize = 256;
 const MAX_CURVES: usize = 6;
 const SAMPLES_VEC4: usize = MAX_SAMPLES / 4;
+
+pub const METRIC_FRAME_TIME_MS: &str = "frame_time_ms";
+pub const METRIC_FPS: &str = "fps";
 
 // Graph scale state (smooth min/max to reduce autoscale jitter)
 #[derive(Resource, Default, Clone, Copy)]
@@ -253,7 +360,10 @@ fn setup_hud(
 
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
-    commands.entity(ui_cam).insert(Camera { order: 1, ..default() });
+    commands.entity(ui_cam).insert(Camera {
+        order: 1,
+        ..default()
+    });
 
     // Root UI node
     let root = commands
@@ -450,10 +560,8 @@ fn sample_diagnostics(
     diagnostics: Option<Res<DiagnosticsStore>>,
     settings: Option<Res<PerfHudSettings>>,
     mut samples: ResMut<SampledValues>,
+    mut providers: ResMut<MetricProviders>,
 ) {
-    let Some(diagnostics) = diagnostics else {
-        return;
-    };
     let Some(s) = settings else {
         return;
     };
@@ -461,24 +569,15 @@ fn sample_diagnostics(
         return;
     }
 
-    // Sample FPS
-    if let Some(fps_diagnostic) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
-        if let Some(fps) = fps_diagnostic.average() {
-            samples.fps = fps.floor() as f32;
+    let ctx = MetricSampleContext {
+        diagnostics: diagnostics.as_deref(),
+    };
+
+    for provider in providers.iter_mut() {
+        if let Some(value) = provider.sample(ctx) {
+            samples.set(provider.metric_id(), value);
         }
     }
-
-    // Sample frame time
-    if let Some(frame_time_diagnostic) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME) {
-        if let Some(frame_time) = frame_time_diagnostic.smoothed() {
-            samples.frame_time_ms = frame_time.floor() as f32;
-        }
-    }
-
-    // Placeholder values for other metrics
-    samples.cpu_load = 0.5;
-    samples.gpu_load = 0.3;
-    samples.net_load = 0.1;
 }
 
 fn update_graph_and_bars(
@@ -503,16 +602,12 @@ fn update_graph_and_bars(
         return;
     };
 
+    let curve_count = s.graph.curves.len().min(MAX_CURVES);
+
     // Sample mapping -> exponential smoothing -> quantization
     let mut filtered_values = [0.0_f32; MAX_CURVES];
-    for (i, cfg) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
-        let raw = match cfg.key {
-            PerfKey::FrameTimeMs => samples.frame_time_ms,
-            PerfKey::Fps => samples.fps,
-            PerfKey::CpuLoad => samples.cpu_load,
-            PerfKey::GpuLoad => samples.gpu_load,
-            PerfKey::NetLoad => samples.net_load,
-        };
+    for (i, cfg) in s.graph.curves.iter().take(curve_count).enumerate() {
+        let raw = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
         let alpha = cfg.smoothing.clamp(0.0, 1.0);
         // Use the last value as prev (read before shifting)
         let prev = if history.length == 0 {
@@ -537,14 +632,24 @@ fn update_graph_and_bars(
         // Fill the next index directly
         let idx = history.length as usize;
         for i in 0..MAX_CURVES {
-            history.values[i][idx] = filtered_values[i];
+            let value = if i < curve_count {
+                filtered_values[i]
+            } else {
+                0.0
+            };
+            history.values[i][idx] = value;
         }
         history.length += 1;
     } else {
         // Sliding window: shift left by one
         for i in 0..MAX_CURVES {
             history.values[i].copy_within(1..MAX_SAMPLES, 0);
-            history.values[i][MAX_SAMPLES - 1] = filtered_values[i];
+            let value = if i < curve_count {
+                filtered_values[i]
+            } else {
+                0.0
+            };
+            history.values[i][MAX_SAMPLES - 1] = value;
         }
     }
 
@@ -555,7 +660,7 @@ fn update_graph_and_bars(
         let len = history.length as usize;
         let mut mn = f32::INFINITY;
         let mut mx = f32::NEG_INFINITY;
-        for (i, cfg) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
+        for (i, cfg) in s.graph.curves.iter().take(curve_count).enumerate() {
             if cfg.autoscale {
                 for k in 0..len {
                     mn = mn.min(history.values[i][k]);
@@ -613,18 +718,14 @@ fn update_graph_and_bars(
     // Update two left labels: FPS and FrameTimeMs (value + unit)
     if s.graph.enabled && h.graph_label_entities.len() >= 2 {
         // Row 1: FPS (integer) value + unit
-        let fps_text = format!("{:.0} fps", samples.fps);
+        let fps_value = samples.get(METRIC_FPS).unwrap_or(0.0);
+        let fps_text = format!("{:.0} fps", fps_value);
         if let Ok(mut tx) = label_text_q.get_mut(h.graph_label_entities[0]) {
             if **tx != fps_text {
                 **tx = fps_text;
             }
         }
-        if let Some(cur) = s
-            .graph
-            .curves
-            .iter()
-            .find(|c| matches!(c.key, PerfKey::Fps))
-        {
+        if let Some(cur) = s.graph.curves.iter().find(|c| c.metric_id == METRIC_FPS) {
             if let Ok(mut col) = label_color_q.get_mut(h.graph_label_entities[0]) {
                 *col = TextColor(cur.color);
             }
@@ -632,7 +733,8 @@ fn update_graph_and_bars(
         // Use column layout to avoid label overlap
 
         // Row 2: Frame time (1 decimal) value + unit
-        let ft_text = format!("{:.1} ms", samples.frame_time_ms);
+        let frame_time_value = samples.get(METRIC_FRAME_TIME_MS).unwrap_or(0.0);
+        let ft_text = format!("{:.1} ms", frame_time_value);
         if let Ok(mut tx) = label_text_q.get_mut(h.graph_label_entities[1]) {
             if **tx != ft_text {
                 **tx = ft_text;
@@ -642,7 +744,7 @@ fn update_graph_and_bars(
             .graph
             .curves
             .iter()
-            .find(|c| matches!(c.key, PerfKey::FrameTimeMs))
+            .find(|c| c.metric_id == METRIC_FRAME_TIME_MS)
         {
             if let Ok(mut col) = label_color_q.get_mut(h.graph_label_entities[1]) {
                 *col = TextColor(cur.color);
@@ -670,10 +772,13 @@ fn update_graph_and_bars(
                 mat.params.border_bottom = if s.graph.border.bottom { 1 } else { 0 };
                 mat.params.border_right = if s.graph.border.right { 1 } else { 0 };
                 mat.params.border_top = if s.graph.border.top { 1 } else { 0 };
-                mat.params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
+                mat.params.curve_count = curve_count as u32;
                 // Sync curve colors every frame to allow hot updates
-                for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
+                for (i, c) in s.graph.curves.iter().take(curve_count).enumerate() {
                     mat.params.colors[i] = c.color.to_linear().to_vec4();
+                }
+                for i in curve_count..MAX_CURVES {
+                    mat.params.colors[i] = Vec4::ZERO;
                 }
                 // Write values (pack into vec4)
                 let len = MAX_SAMPLES.min(history.length as usize);
@@ -719,13 +824,7 @@ fn update_graph_and_bars(
             if i >= h.bar_materials.len() {
                 break;
             }
-            let val = match cfg.key {
-                PerfKey::FrameTimeMs => samples.frame_time_ms,
-                PerfKey::Fps => samples.fps,
-                PerfKey::CpuLoad => samples.cpu_load,
-                PerfKey::GpuLoad => samples.gpu_load,
-                PerfKey::NetLoad => samples.net_load,
-            };
+            let val = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
             // Normalize: map current_min..current_max to 0..1
             let norm = if current_max > current_min {
                 ((val - current_min) / (current_max - current_min)).clamp(0.0, 1.0)
@@ -751,4 +850,3 @@ fn update_graph_and_bars(
 
 // Re-export helper API
 pub use PerfHudSettings as Settings;
-pub use PerfKey::*;
