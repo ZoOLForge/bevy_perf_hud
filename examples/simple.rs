@@ -1,6 +1,5 @@
 use bevy::prelude::*;
-use bevy_perf_hud::{BevyPerfHudPlugin, Settings, CurveConfig, BarConfig, PerfKey};
-
+use bevy_perf_hud::{BarConfig, BevyPerfHudPlugin, CurveConfig, PerfKey, Settings};
 
 fn main() {
     App::new()
@@ -10,11 +9,13 @@ fn main() {
             origin: Vec2::new(16.0, 16.0),
             graph: bevy_perf_hud::GraphSettings {
                 enabled: true,
-                size: Vec2::new(720.0, 180.0),
+                size: Vec2::new(400.0, 120.0),
+                label_width: 60.0,
                 min_y: 0.0,
                 max_y: 30.0,
                 thickness: 0.012,
                 bg_color: Color::srgba(0.0, 0.0, 0.0, 0.25),
+                y_ticks: 2,
                 border: bevy_perf_hud::GraphBorder {
                     color: Color::srgba(1.0, 1.0, 1.0, 1.0),
                     thickness: 2.0,
@@ -30,22 +31,54 @@ fn main() {
                 y_step_quantize: 5.0,
                 y_scale_smoothing: 0.3,
                 curves: vec![
-                    CurveConfig { key: PerfKey::FrameTimeMs, color: Color::srgb(0.0, 1.0, 0.0), autoscale: true, smoothing: 0.25, quantize_step: 0.1 },
-                    CurveConfig { key: PerfKey::Fps, color: Color::srgb(0.9, 0.0, 0.0), autoscale: true, smoothing: 0.2, quantize_step: 1.0 },
+                    CurveConfig {
+                        key: PerfKey::FrameTimeMs,
+                        color: Color::srgb(0.0, 1.0, 0.0),
+                        autoscale: true,
+                        smoothing: 0.25,
+                        quantize_step: 0.1,
+                        unit: "MS".into(),
+                        unit_precision: 1,
+                    },
+                    CurveConfig {
+                        key: PerfKey::Fps,
+                        color: Color::srgb(0.9, 0.0, 0.0),
+                        autoscale: true,
+                        smoothing: 0.2,
+                        quantize_step: 1.0,
+                        unit: "FPS".into(),
+                        unit_precision: 0,
+                    },
                 ],
             },
             bars: bevy_perf_hud::BarsSettings {
                 enabled: true,
                 bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
                 bars: vec![
-                    BarConfig { key: PerfKey::CpuLoad, label: "CPU".into(), color: Color::srgb(1.0, 0.3, 0.0) },
-                    BarConfig { key: PerfKey::GpuLoad, label: "GPU".into(), color: Color::srgb(0.0, 0.0, 1.0) },
-                    BarConfig { key: PerfKey::NetLoad, label: "NET".into(), color: Color::srgb(0.0, 1.0, 0.0) },
+                    BarConfig {
+                        key: PerfKey::CpuLoad,
+                        label: "CPU".into(),
+                        color: Color::srgb(1.0, 0.3, 0.0),
+                    },
+                    BarConfig {
+                        key: PerfKey::GpuLoad,
+                        label: "GPU".into(),
+                        color: Color::srgb(0.0, 0.0, 1.0),
+                    },
+                    BarConfig {
+                        key: PerfKey::NetLoad,
+                        label: "NET".into(),
+                        color: Color::srgb(0.0, 1.0, 0.0),
+                    },
                 ],
             },
         })
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window { title: "bevy_perf_hud demo".into(), resolution: (1280., 720.).into(), ..default() }),
+            primary_window: Some(Window {
+                title: "bevy_perf_hud demo".into(),
+                resolution: (1280., 720.).into(),
+                ..default()
+            }),
             ..default()
         }))
         .add_plugins(BevyPerfHudPlugin)

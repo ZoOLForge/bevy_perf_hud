@@ -2,7 +2,7 @@ use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    text::TextColor,
+    text::{TextColor, TextFont},
     ui::{
         FlexDirection, MaterialNode, Node, PositionType, UiMaterial, UiMaterialPlugin, UiRect, Val,
     },
@@ -22,15 +22,7 @@ impl Plugin for BevyPerfHudPlugin {
             .init_resource::<HistoryBuffers>()
             .init_resource::<GraphScaleState>()
             .add_systems(Startup, setup_hud)
-            .add_systems(
-                Update,
-                (
-                    sample_diagnostics,
-                    update_text_display,
-                    update_graph_and_bars,
-                )
-                    .chain(),
-            );
+            .add_systems(Update, (sample_diagnostics, update_graph_and_bars).chain());
     }
 }
 
@@ -48,6 +40,7 @@ pub struct PerfHudSettings {
 pub struct GraphSettings {
     pub enabled: bool,
     pub size: Vec2,
+    pub label_width: f32, // 左侧标签宽度（像素）
     pub min_y: f32,
     pub max_y: f32,
     pub thickness: f32,
@@ -55,6 +48,8 @@ pub struct GraphSettings {
     pub bg_color: Color, // 图表背景颜色（含透明度）
     // 边框配置（集中管理）
     pub border: GraphBorder,
+    // Y 轴刻度数量（>=2）。单位与精度改为按曲线配置
+    pub y_ticks: u32,
     // Y 轴比例控制
     pub y_include_zero: bool,   // 是否强制包含 0
     pub y_min_span: f32,        // 最小跨度，避免范围过小
@@ -65,8 +60,8 @@ pub struct GraphSettings {
 
 #[derive(Clone)]
 pub struct GraphBorder {
-    pub color: Color,    // 颜色（含透明度）
-    pub thickness: f32,  // 厚度（像素）
+    pub color: Color,   // 颜色（含透明度）
+    pub thickness: f32, // 厚度（像素）
     pub left: bool,
     pub bottom: bool,
     pub right: bool,
@@ -87,8 +82,10 @@ pub struct CurveConfig {
     pub key: PerfKey,
     pub color: Color,
     pub autoscale: bool,
-    pub smoothing: f32,     // 0..1, 指数平滑系数，0=不滤波，1=完全跟随新值
-    pub quantize_step: f32, // >0 启用取整（按步进量四舍五入到最接近的倍数）
+    pub smoothing: f32,      // 0..1, 指数平滑系数，0=不滤波，1=完全跟随新值
+    pub quantize_step: f32,  // >0 启用取整（按步进量四舍五入到最接近的倍数）
+    pub unit: String,        // 单位（例如 "ms"、"fps"）
+    pub unit_precision: u32, // 数值小数位数
 }
 
 /// Configuration for a performance bar
@@ -112,9 +109,10 @@ pub enum PerfKey {
 /// Handles to HUD entities
 #[derive(Resource)]
 pub struct HudHandles {
-    pub text_entity: Entity,
     pub graph_entity: Option<Entity>,
     pub graph_material: Option<Handle<MultiLineGraphMaterial>>,
+    pub graph_label_entities: Vec<Entity>,
+    pub graph_label_width: f32,
     pub bar_entities: Vec<Entity>,
     pub bar_materials: Vec<Handle<BarMaterial>>,
 }
@@ -264,23 +262,10 @@ fn setup_hud(
         },))
         .id();
 
-    // 文本显示
-    let text_entity = commands
-        .spawn((
-            Text::new("FPS: 0\nFrame Time: 0.0ms"),
-            TextColor(Color::WHITE),
-            Node {
-                width: Val::Px(s.graph.size.x),
-                height: Val::Px(36.0),
-                ..default()
-            },
-        ))
-        .id();
-    commands.entity(text_entity).insert(ChildOf(root));
-
     // 折线图材质与节点（可开关）
     let mut graph_entity_opt: Option<Entity> = None;
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
+    let mut graph_label_entities: Vec<Entity> = Vec::new();
     if s.graph.enabled {
         let mut graph_params = MultiLineGraphParams::default();
         graph_params.length = 0;
@@ -304,6 +289,51 @@ fn setup_hud(
             let v = c.color.to_linear().to_vec4();
             graph_params.colors[i] = v;
         }
+        // 行容器：左侧标签 + 右侧图表
+        let label_width = s.graph.label_width.max(40.0);
+        let graph_row = commands
+            .spawn((Node {
+                width: Val::Px(s.graph.size.x + label_width),
+                height: Val::Px(s.graph.size.y),
+                flex_direction: FlexDirection::Row,
+                ..default()
+            },))
+            .id();
+        commands.entity(graph_row).insert(ChildOf(root));
+
+        // 标签容器（纵向排列，避免重叠）
+        let label_container = commands
+            .spawn((Node {
+                width: Val::Px(label_width),
+                height: Val::Px(s.graph.size.y),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },))
+            .id();
+        commands.entity(label_container).insert(ChildOf(graph_row));
+
+        // 生成两行标签
+        for _ in 0..2usize {
+            let eid = commands
+                .spawn((
+                    Text::new(""),
+                    TextColor(Color::WHITE),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    Node {
+                        width: Val::Px(label_width),
+                        height: Val::Px(16.0),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(eid).insert(ChildOf(label_container));
+            graph_label_entities.push(eid);
+        }
+
+        // 图表节点
         let gh = graph_mats.add(MultiLineGraphMaterial {
             params: graph_params,
         });
@@ -317,7 +347,7 @@ fn setup_hud(
                 },
             ))
             .id();
-        commands.entity(ge).insert(ChildOf(root));
+        commands.entity(ge).insert(ChildOf(graph_row));
         graph_entity_opt = Some(ge);
         graph_handle_opt = Some(gh);
     }
@@ -398,9 +428,10 @@ fn setup_hud(
 
     // Store handles
     commands.insert_resource(HudHandles {
-        text_entity,
         graph_entity: graph_entity_opt,
         graph_material: graph_handle_opt,
+        graph_label_entities,
+        graph_label_width: s.graph.label_width.max(40.0),
         bar_entities,
         bar_materials,
     });
@@ -431,7 +462,7 @@ fn sample_diagnostics(
     // Sample frame time
     if let Some(frame_time_diagnostic) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME) {
         if let Some(frame_time) = frame_time_diagnostic.smoothed() {
-            samples.frame_time_ms = (frame_time * 1000.0).floor() as f32;
+            samples.frame_time_ms = frame_time.floor() as f32;
         }
     }
 
@@ -439,40 +470,6 @@ fn sample_diagnostics(
     samples.cpu_load = 0.5;
     samples.gpu_load = 0.3;
     samples.net_load = 0.1;
-}
-
-fn update_text_display(
-    settings: Option<Res<PerfHudSettings>>,
-    handles: Option<Res<HudHandles>>,
-    samples: Res<SampledValues>,
-    mut text_query: Query<&mut Text>,
-) {
-    let Some(s) = settings else {
-        return;
-    };
-    if !s.enabled {
-        return;
-    }
-    let Some(h) = handles else {
-        return;
-    };
-
-    // 若图表与柱状条均关闭，则无需更新
-    if !s.graph.enabled && !s.bars.enabled {
-        return;
-    }
-
-    if let Ok(mut text) = text_query.get_mut(h.text_entity) {
-        let new_text = format!(
-            "FPS: {:.0}\nFrame Time: {:.1}ms",
-            samples.fps, samples.frame_time_ms
-        );
-
-        // Only update if the text actually changed to avoid unnecessary updates
-        if **text != new_text {
-            **text = new_text;
-        }
-    }
 }
 
 fn update_graph_and_bars(
@@ -483,6 +480,9 @@ fn update_graph_and_bars(
     mut scale_state: ResMut<GraphScaleState>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
+    _label_node_q: Query<&mut Node>,
+    mut label_text_q: Query<&mut Text>,
+    mut label_color_q: Query<&mut TextColor>,
 ) {
     let Some(s) = settings else {
         return;
@@ -600,6 +600,47 @@ fn update_graph_and_bars(
 
     let current_min = scale_state.min_y;
     let current_max = (scale_state.max_y).max(current_min + 1e-3);
+
+    // 更新左侧标签为两行：FPS 与 FrameTimeMs（数值+单位）
+    if s.graph.enabled && h.graph_label_entities.len() >= 2 {
+        // 行1：FPS（取整） 显示“数值 + 单位”
+        let fps_text = format!("{:.0} fps", samples.fps);
+        if let Ok(mut tx) = label_text_q.get_mut(h.graph_label_entities[0]) {
+            if **tx != fps_text {
+                **tx = fps_text;
+            }
+        }
+        if let Some(cur) = s
+            .graph
+            .curves
+            .iter()
+            .find(|c| matches!(c.key, PerfKey::Fps))
+        {
+            if let Ok(mut col) = label_color_q.get_mut(h.graph_label_entities[0]) {
+                *col = TextColor(cur.color);
+            }
+        }
+        // 使用列布局，避免绝对定位重叠
+
+        // 行2：Frame Time（1位小数） 显示“数值 + 单位”
+        let ft_text = format!("{:.1} ms", samples.frame_time_ms);
+        if let Ok(mut tx) = label_text_q.get_mut(h.graph_label_entities[1]) {
+            if **tx != ft_text {
+                **tx = ft_text;
+            }
+        }
+        if let Some(cur) = s
+            .graph
+            .curves
+            .iter()
+            .find(|c| matches!(c.key, PerfKey::FrameTimeMs))
+        {
+            if let Ok(mut col) = label_color_q.get_mut(h.graph_label_entities[1]) {
+                *col = TextColor(cur.color);
+            }
+        }
+        // 使用列布局，避免绝对定位重叠
+    }
 
     // 更新折线图材质（仅在启用）
     if s.graph.enabled {
