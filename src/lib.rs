@@ -66,7 +66,7 @@ pub struct GraphSettings {
 pub struct BarsSettings {
     pub enabled: bool,
     pub bars: Vec<BarConfig>,
-    pub bg_alpha: f32, // 柱状条背景透明度（0..1）
+    pub bg_color: Color, // 柱状条背景颜色（含透明度）
 }
 
 /// Configuration for a performance curve
@@ -326,10 +326,10 @@ fn setup_hud(
                     g: bar_cfg.color.to_linear().to_vec4().y,
                     b: bar_cfg.color.to_linear().to_vec4().z,
                     a: bar_cfg.color.to_linear().to_vec4().w,
-                    bg_r: 0.12,
-                    bg_g: 0.12,
-                    bg_b: 0.12,
-                    bg_a: s.bars.bg_alpha,
+                    bg_r: s.bars.bg_color.to_linear().to_vec4().x,
+                    bg_g: s.bars.bg_color.to_linear().to_vec4().y,
+                    bg_b: s.bars.bg_color.to_linear().to_vec4().z,
+                    bg_a: s.bars.bg_color.to_linear().to_vec4().w,
                 },
             });
             let bar_entity = commands
@@ -625,7 +625,11 @@ fn update_graph_and_bars(
                 mat.params.g = v.y;
                 mat.params.b = v.z;
                 mat.params.a = v.w;
-                mat.params.bg_a = s.bars.bg_alpha;
+                let bg = s.bars.bg_color.to_linear().to_vec4();
+                mat.params.bg_r = bg.x;
+                mat.params.bg_g = bg.y;
+                mat.params.bg_b = bg.z;
+                mat.params.bg_a = bg.w;
             }
         }
     }
