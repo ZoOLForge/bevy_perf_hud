@@ -52,6 +52,7 @@ pub struct GraphSettings {
     pub max_y: f32,
     pub thickness: f32,
     pub curves: Vec<CurveConfig>,
+    pub curve_defaults: CurveDefaults,
     pub bg_color: Color, // Graph background color (with alpha)
     // Border configuration
     pub border: GraphBorder,
@@ -86,22 +87,32 @@ pub struct BarsSettings {
 /// Configuration for a performance curve
 #[derive(Clone)]
 pub struct CurveConfig {
-    pub metric_id: String,
-    pub color: Color,
+    pub metric: MetricDefinition,
+    pub autoscale: Option<bool>,
+    pub smoothing: Option<f32>, // 0..1 exponential smoothing; 0=no filter, 1=follow new value
+    pub quantize_step: Option<f32>, // >0 rounds to nearest multiple of this step
+}
+
+#[derive(Clone)]
+pub struct CurveDefaults {
     pub autoscale: bool,
-    pub smoothing: f32, // 0..1 exponential smoothing; 0=no filter, 1=follow new value
-    pub quantize_step: f32, // >0 rounds to nearest multiple of this step
-    pub unit: String,   // Unit (e.g., "ms", "fps")
-    pub unit_precision: u32, // Decimal precision
+    pub smoothing: f32,
+    pub quantize_step: f32,
 }
 
 /// Configuration for a performance bar
 #[derive(Clone)]
 pub struct BarConfig {
-    pub metric_id: String,
-    pub label: String,
-    pub color: Color,
+    pub metric: MetricDefinition,
+}
+
+#[derive(Clone)]
+pub struct MetricDefinition {
+    pub id: String,
+    pub label: Option<String>,
     pub unit: Option<String>,
+    pub precision: u32,
+    pub color: Color,
 }
 
 #[derive(Clone)]
@@ -428,7 +439,7 @@ fn setup_hud(
         graph_params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
         // Write curve colors
         for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
-            let v = c.color.to_linear().to_vec4();
+            let v = c.metric.color.to_linear().to_vec4();
             graph_params.colors[i] = v;
         }
         // Row container: left labels + right graph
@@ -474,7 +485,7 @@ fn setup_hud(
                 .id();
             commands.entity(eid).insert(ChildOf(label_container));
             graph_labels.push(GraphLabelHandle {
-                metric_id: curve.metric_id.clone(),
+                metric_id: curve.metric.id.clone(),
                 entity: eid,
             });
         }
@@ -516,6 +527,12 @@ fn setup_hud(
         bars_root_opt = Some(bars_root);
 
         for bar_cfg in &s.bars.bars {
+            let base_label = bar_cfg
+                .metric
+                .label
+                .clone()
+                .unwrap_or_else(|| bar_cfg.metric.id.clone());
+
             // Single bar row (label + bar)
             let row = commands
                 .spawn((Node {
@@ -534,10 +551,10 @@ fn setup_hud(
             let mat = bar_mats.add(BarMaterial {
                 params: BarParams {
                     value: 0.0,
-                    r: bar_cfg.color.to_linear().to_vec4().x,
-                    g: bar_cfg.color.to_linear().to_vec4().y,
-                    b: bar_cfg.color.to_linear().to_vec4().z,
-                    a: bar_cfg.color.to_linear().to_vec4().w,
+                    r: bar_cfg.metric.color.to_linear().to_vec4().x,
+                    g: bar_cfg.metric.color.to_linear().to_vec4().y,
+                    b: bar_cfg.metric.color.to_linear().to_vec4().z,
+                    a: bar_cfg.metric.color.to_linear().to_vec4().w,
                     bg_r: s.bars.bg_color.to_linear().to_vec4().x,
                     bg_g: s.bars.bg_color.to_linear().to_vec4().y,
                     bg_b: s.bars.bg_color.to_linear().to_vec4().z,
@@ -559,7 +576,7 @@ fn setup_hud(
             // Overlay label inside bar / 在柱条内部覆写标签
             let bar_label = commands
                 .spawn((
-                    Text::new(bar_cfg.label.clone()),
+                    Text::new(base_label),
                     TextColor(Color::WHITE),
                     TextFont {
                         font_size: 12.0,
@@ -646,8 +663,11 @@ fn update_graph_and_bars(
     // Sample mapping -> exponential smoothing -> quantization
     let mut filtered_values = [0.0_f32; MAX_CURVES];
     for (i, cfg) in s.graph.curves.iter().take(curve_count).enumerate() {
-        let raw = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
-        let alpha = cfg.smoothing.clamp(0.0, 1.0);
+        let raw = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
+        let smoothing = cfg
+            .smoothing
+            .unwrap_or(s.graph.curve_defaults.smoothing)
+            .clamp(0.0, 1.0);
         // Use the last value as prev (read before shifting)
         let prev = if history.length == 0 {
             raw
@@ -656,9 +676,11 @@ fn update_graph_and_bars(
         } else {
             history.values[i][MAX_SAMPLES - 1]
         };
-        let smoothed = prev + (raw - prev) * alpha;
+        let smoothed = prev + (raw - prev) * smoothing;
         // Quantize: round to nearest multiple; disabled when step <= 0
-        let step = cfg.quantize_step;
+        let step = cfg
+            .quantize_step
+            .unwrap_or(s.graph.curve_defaults.quantize_step);
         filtered_values[i] = if step > 0.0 {
             (smoothed / step).round() * step
         } else {
@@ -695,12 +717,17 @@ fn update_graph_and_bars(
     // Compute target Y scale (autoscale or fixed), then smooth/quantize
     let mut target_min = s.graph.min_y;
     let mut target_max = s.graph.max_y;
-    if s.graph.curves.iter().any(|c| c.autoscale) && history.length > 0 {
+    if s.graph
+        .curves
+        .iter()
+        .any(|c| c.autoscale.unwrap_or(s.graph.curve_defaults.autoscale))
+        && history.length > 0
+    {
         let len = history.length as usize;
         let mut mn = f32::INFINITY;
         let mut mx = f32::NEG_INFINITY;
         for (i, cfg) in s.graph.curves.iter().take(curve_count).enumerate() {
-            if cfg.autoscale {
+            if cfg.autoscale.unwrap_or(s.graph.curve_defaults.autoscale) {
                 for k in 0..len {
                     mn = mn.min(history.values[i][k]);
                     mx = mx.max(history.values[i][k]);
@@ -761,22 +788,25 @@ fn update_graph_and_bars(
                 .graph
                 .curves
                 .iter()
-                .find(|c| c.metric_id == label_handle.metric_id)
+                .find(|c| c.metric.id == label_handle.metric_id)
             else {
                 continue;
             };
 
-            let value = samples.get(curve.metric_id.as_str()).unwrap_or(0.0);
-            let precision = curve.unit_precision as usize;
+            let definition = &curve.metric;
+            let precision = definition.precision as usize;
+            let unit = definition.unit.as_deref().unwrap_or("");
+
+            let value = samples.get(curve.metric.id.as_str()).unwrap_or(0.0);
             let formatted = if precision == 0 {
                 format!("{value:.0}")
             } else {
                 format!("{value:.precision$}", precision = precision)
             };
-            let text_value = if curve.unit.is_empty() {
+            let text_value = if unit.is_empty() {
                 formatted
             } else {
-                format!("{formatted} {}", curve.unit)
+                format!("{formatted} {unit}")
             };
 
             if let Ok(mut tx) = label_text_q.get_mut(label_handle.entity) {
@@ -785,7 +815,7 @@ fn update_graph_and_bars(
                 }
             }
             if let Ok(mut col) = label_color_q.get_mut(label_handle.entity) {
-                *col = TextColor(curve.color);
+                *col = TextColor(curve.metric.color);
             }
         }
     }
@@ -812,7 +842,7 @@ fn update_graph_and_bars(
                 mat.params.curve_count = curve_count as u32;
                 // Sync curve colors every frame to allow hot updates
                 for (i, c) in s.graph.curves.iter().take(curve_count).enumerate() {
-                    mat.params.colors[i] = c.color.to_linear().to_vec4();
+                    mat.params.colors[i] = c.metric.color.to_linear().to_vec4();
                 }
                 for i in curve_count..MAX_CURVES {
                     mat.params.colors[i] = Vec4::ZERO;
@@ -861,7 +891,7 @@ fn update_graph_and_bars(
             if i >= h.bar_materials.len() {
                 break;
             }
-            let val = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
+            let val = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
             // Normalize: map current_min..current_max to 0..1
             let norm = if current_max > current_min {
                 ((val - current_min) / (current_max - current_min)).clamp(0.0, 1.0)
@@ -870,7 +900,7 @@ fn update_graph_and_bars(
             };
             if let Some(mat) = bar_mats.get_mut(&h.bar_materials[i]) {
                 mat.params.value = norm;
-                let v = cfg.color.to_linear().to_vec4();
+                let v = cfg.metric.color.to_linear().to_vec4();
                 mat.params.r = v.x;
                 mat.params.g = v.y;
                 mat.params.b = v.z;
@@ -884,13 +914,13 @@ fn update_graph_and_bars(
 
             // 在柱条内部刷新文字与颜色 / Update bar label text inside the bar
             if let Some(&label_entity) = h.bar_labels.get(i) {
-                let maybe_curve = s.graph.curves.iter().find(|c| c.metric_id == cfg.metric_id);
-                let precision = maybe_curve.map(|c| c.unit_precision as usize).unwrap_or(0);
-                let unit = cfg
-                    .unit
-                    .as_deref()
-                    .or(maybe_curve.map(|c| c.unit.as_str()))
-                    .unwrap_or("");
+                let definition = &cfg.metric;
+                let base_label = definition
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| definition.id.clone());
+                let precision = definition.precision as usize;
+                let unit = definition.unit.as_deref().unwrap_or("");
 
                 let formatted = if precision == 0 {
                     format!("{val:.0}")
@@ -902,7 +932,7 @@ fn update_graph_and_bars(
                 } else {
                     format!("{formatted} {unit}")
                 };
-                let display_text = format!("{} {}", cfg.label, value_text);
+                let display_text = format!("{} {}", base_label, value_text);
 
                 if let Ok(mut tx) = label_text_q.get_mut(label_entity) {
                     if **tx != display_text {

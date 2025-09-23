@@ -1,6 +1,8 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BevyPerfHudPlugin, CurveConfig, HudHandles, Settings};
+use bevy_perf_hud::{
+    BarConfig, BevyPerfHudPlugin, CurveConfig, HudHandles, MetricDefinition, Settings,
+};
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
 enum HudMode {
@@ -301,6 +303,28 @@ fn toggle_hud_mode_on_f1(
 }
 
 fn main() {
+    let frame_metric = MetricDefinition {
+        id: "frame_time_ms".into(),
+        label: Some("Frame:".into()),
+        unit: Some("ms".into()),
+        precision: 1,
+        color: Color::srgb(0.0, 1.0, 0.0),
+    };
+    let fps_metric = MetricDefinition {
+        id: "fps".into(),
+        label: Some("FPS:".into()),
+        unit: Some("fps".into()),
+        precision: 0,
+        color: Color::srgb(0.9, 0.0, 0.0),
+    };
+    let entity_metric = MetricDefinition {
+        id: "entity_count".into(),
+        label: Some("Entities:".into()),
+        unit: None,
+        precision: 0,
+        color: Color::srgb(0.1, 0.8, 0.4),
+    };
+
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
         .init_resource::<SpawnParams>()
@@ -333,24 +357,23 @@ fn main() {
                 y_margin_frac: 0.10,
                 y_step_quantize: 5.0,
                 y_scale_smoothing: 0.3,
+                curve_defaults: bevy_perf_hud::CurveDefaults {
+                    autoscale: true,
+                    smoothing: 0.2,
+                    quantize_step: 1.0,
+                },
                 curves: vec![
                     CurveConfig {
-                        metric_id: "frame_time_ms".into(),
-                        color: Color::srgb(0.0, 1.0, 0.0),
-                        autoscale: true,
-                        smoothing: 0.25,
-                        quantize_step: 0.1,
-                        unit: "MS".into(),
-                        unit_precision: 1,
+                        metric: frame_metric.clone(),
+                        autoscale: None,
+                        smoothing: Some(0.25),
+                        quantize_step: Some(0.1),
                     },
                     CurveConfig {
-                        metric_id: "fps".into(),
-                        color: Color::srgb(0.9, 0.0, 0.0),
-                        autoscale: true,
-                        smoothing: 0.2,
-                        quantize_step: 1.0,
-                        unit: "FPS".into(),
-                        unit_precision: 0,
+                        metric: fps_metric.clone(),
+                        autoscale: None,
+                        smoothing: None,
+                        quantize_step: None,
                     },
                 ],
             },
@@ -359,22 +382,13 @@ fn main() {
                 bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
                 bars: vec![
                     BarConfig {
-                        metric_id: "frame_time_ms".into(),
-                        label: "Frame".into(),
-                        color: Color::srgb(1.0, 0.3, 0.0),
-                        unit: Some("ms".into()),
+                        metric: frame_metric.clone(),
                     },
                     BarConfig {
-                        metric_id: "fps".into(),
-                        label: "FPS".into(),
-                        color: Color::srgb(0.0, 0.0, 1.0),
-                        unit: Some("fps".into()),
+                        metric: fps_metric.clone(),
                     },
                     BarConfig {
-                        metric_id: "entity_count".into(),
-                        label: "Entities".into(),
-                        color: Color::srgb(0.1, 0.8, 0.4),
-                        unit: None,
+                        metric: entity_metric.clone(),
                     },
                 ],
             },
