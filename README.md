@@ -1,6 +1,13 @@
 # bevy_perf_hud
 
-A configurable performance heads-up display (HUD) plugin for Bevy applications. Visualize frame pacing, entity counts, and resource usage in real time, with extensibility for your own metrics.
+[![CI](https://github.com/ZoOLForge/bevy_perf_hud/workflows/CI/badge.svg)](https://github.com/ZoOLForge/bevy_perf_hud/actions)
+[![Crates.io](https://img.shields.io/crates/v/bevy_perf_hud)](https://crates.io/crates/bevy_perf_hud)
+[![Downloads](https://img.shields.io/crates/d/bevy_perf_hud)](https://crates.io/crates/bevy_perf_hud)
+[![Documentation](https://docs.rs/bevy_perf_hud/badge.svg)](https://docs.rs/bevy_perf_hud)
+[![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/Seldom-SE/seldom_pixel#license)
+
+A configurable performance heads-up display (HUD) plugin for Bevy applications. Visualize frame pacing, entity counts,
+and resource usage in real time, with extensibility for your own metrics.
 
 ## Features
 
@@ -20,7 +27,8 @@ bevy = { version = "0.16", default-features = false, features = ["bevy_winit", "
 bevy_perf_hud = "0.1"
 ```
 
-> Tip: If you rely on `DefaultPlugins`, ensure `bevy_diagnostic` and `bevy_ui` features are enabled so the HUD can gather data and render correctly.
+> Tip: If you rely on `DefaultPlugins`, ensure `bevy_diagnostic` and `bevy_ui` features are enabled so the HUD can
+> gather data and render correctly.
 
 ## Quick Start
 
@@ -36,7 +44,8 @@ fn main() {
 }
 ```
 
-By default the HUD appears near the top-right corner. To reposition or customize the layout, insert a `PerfHudSettings` resource before adding the plugin:
+By default the HUD appears near the top-right corner. To reposition or customize the layout, insert a `PerfHudSettings`
+resource before adding the plugin:
 
 ```rust
 use bevy::prelude::*;
@@ -56,14 +65,14 @@ fn main() {
 
 ## Built-in Metrics
 
-| Metric ID | Description |
-| --- | --- |
-| `fps` | Frames per second (floored to an integer). |
-| `frame_time_ms` | Smoothed frame time in milliseconds. |
-| `entity_count` | Active entity count in the `World`. |
-| `system/cpu_usage` | Overall system CPU usage percentage. |
-| `system/mem_usage` | Overall system memory usage percentage. |
-| `process/cpu_usage` | CPU usage of the running process. |
+| Metric ID           | Description                                    |
+|---------------------|------------------------------------------------|
+| `fps`               | Frames per second (floored to an integer).     |
+| `frame_time_ms`     | Smoothed frame time in milliseconds.           |
+| `entity_count`      | Active entity count in the `World`.            |
+| `system/cpu_usage`  | Overall system CPU usage percentage.           |
+| `system/mem_usage`  | Overall system memory usage percentage.        |
+| `process/cpu_usage` | CPU usage of the running process.              |
 | `process/mem_usage` | Memory footprint of the running process (MiB). |
 
 ## Custom Metrics
@@ -109,9 +118,15 @@ cargo run --example simple
 cargo run --example custom_metric
 ```
 
+## Supported Versions
+
+| bevy | bevy_perf_hud |
+|------|---------------|
+| 0.16 | 0.1           |
+
 ## License
 
-Dual-licensed under either the MIT License or Apache License 2.0. See the `LICENSE` files (if present) or `Cargo.toml` for details.
+Dual-licensed under either the MIT License or Apache License 2.0.
 
 ## Acknowledgements
 

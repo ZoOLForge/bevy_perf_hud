@@ -1,5 +1,11 @@
 # bevy_perf_hud
 
+[![CI](https://github.com/ZoOLForge/bevy_perf_hud/workflows/CI/badge.svg)](https://github.com/ZoOLForge/bevy_perf_hud/actions)
+[![Crates.io](https://img.shields.io/crates/v/bevy_perf_hud)](https://crates.io/crates/bevy_perf_hud)
+[![Downloads](https://img.shields.io/crates/d/bevy_perf_hud)](https://crates.io/crates/bevy_perf_hud)
+[![Documentation](https://docs.rs/bevy_perf_hud/badge.svg)](https://docs.rs/bevy_perf_hud)
+[![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/Seldom-SE/seldom_pixel#license)
+
 高性能监控 HUD 插件，专为 Bevy 应用打造，可在运行时展示帧率、帧时间、系统与进程资源等指标，并提供可扩展的自定义度量体系。
 
 ## 特性 Highlights
@@ -109,9 +115,15 @@ cargo run --example simple
 cargo run --example custom_metric
 ```
 
+## 支持版本
+
+| bevy | bevy_perf_hud |
+|------|---------------|
+| 0.16 | 0.1           |
+
 ## 许可证 License
 
-本项目采用双许可协议：MIT 或 Apache-2.0。你可以在 `LICENSE-MIT` 与 `LICENSE-APACHE`（如果存在）中找到完整文本，亦可在
+本项目采用双许可协议：MIT 或 Apache-2.0。你可以在 `LICENSE-MIT` 与 `LICENSE-APACHE` 中找到完整文本，亦可在
 `Cargo.toml` 中查看许可声明。
 
 ## 致谢 Acknowledgements
