@@ -305,7 +305,7 @@ fn toggle_hud_mode_on_f1(
 fn main() {
     let frame_metric = MetricDefinition {
         id: "frame_time_ms".into(),
-        label: Some("Frame:".into()),
+        label: Some("FT:".into()),
         unit: Some("ms".into()),
         precision: 1,
         color: Color::srgb(0.0, 1.0, 0.0),
@@ -319,7 +319,7 @@ fn main() {
     };
     let entity_metric = MetricDefinition {
         id: "entity_count".into(),
-        label: Some("Entities:".into()),
+        label: Some("Ent:".into()),
         unit: None,
         precision: 0,
         color: Color::srgb(0.1, 0.8, 0.4),
