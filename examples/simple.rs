@@ -417,27 +417,35 @@ fn main() {
             bars: bevy_perf_hud::BarsSettings {
                 enabled: true,
                 bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+                show_value_default: true, // Default: show values and units
                 bars: vec![
                     BarConfig {
                         metric: frame_metric.clone(),
+                        show_value: None, // Use default (show value)
                     },
                     BarConfig {
                         metric: fps_metric.clone(),
-                    },
-                    BarConfig {
-                        metric: entity_metric.clone(),
+                        show_value: None, // Use default (show value)
                     },
                     BarConfig {
                         metric: sys_cpu_metric.clone(),
+                        show_value: Some(false), // Only show label, hide value
                     },
                     BarConfig {
                         metric: sys_mem_metric.clone(),
+                        show_value: Some(false), // Only show label, hide value
                     },
+                    // BarConfig {
+                    //     metric: proc_cpu_metric.clone(),
+                    //     show_value: None,
+                    // },
+                    // BarConfig {
+                    //     metric: proc_mem_metric.clone(),
+                    //     show_value: None,
+                    // },
                     BarConfig {
-                        metric: proc_cpu_metric.clone(),
-                    },
-                    BarConfig {
-                        metric: proc_mem_metric.clone(),
+                        metric: entity_metric.clone(),
+                        show_value: None, // Use default (show value)
                     },
                 ],
             },

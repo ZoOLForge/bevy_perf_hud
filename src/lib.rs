@@ -95,6 +95,7 @@ pub struct BarsSettings {
     pub enabled: bool,
     pub bars: Vec<BarConfig>,
     pub bg_color: Color, // Bar background color (with alpha)
+    pub show_value_default: bool, // Default setting for showing value and unit in bars
 }
 
 /// Configuration for a performance curve
@@ -117,6 +118,7 @@ pub struct CurveDefaults {
 #[derive(Clone)]
 pub struct BarConfig {
     pub metric: MetricDefinition,
+    pub show_value: Option<bool>, // Whether to show value and unit, defaults to show_value_default
 }
 
 #[derive(Clone)]
@@ -1055,12 +1057,17 @@ fn update_graph_and_bars(
                 } else {
                     format!("{val:.precision$}", precision = precision)
                 };
-                let value_text = if unit.is_empty() {
-                    formatted
+                let show_value = cfg.show_value.unwrap_or(s.bars.show_value_default);
+                let display_text = if show_value {
+                    let value_text = if unit.is_empty() {
+                        formatted
+                    } else {
+                        format!("{formatted}{unit}")
+                    };
+                    format!("{} {}", base_label, value_text)
                 } else {
-                    format!("{formatted} {unit}")
+                    base_label.clone()
                 };
-                let display_text = format!("{} {}", base_label, value_text);
 
                 if let Ok(mut tx) = label_text_q.get_mut(label_entity) {
                     if **tx != display_text {
