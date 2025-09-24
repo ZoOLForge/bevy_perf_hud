@@ -6,6 +6,8 @@
 [![Documentation](https://docs.rs/bevy_perf_hud/badge.svg)](https://docs.rs/bevy_perf_hud)
 [![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/Seldom-SE/seldom_pixel#license)
 
+![Sep-24-2025 18-37-55](https://github.com/user-attachments/assets/a70f766d-db96-4f3d-9d20-39dac1f8270f)
+
 高性能监控 HUD 插件，专为 Bevy 应用打造，可在运行时展示帧率、帧时间、系统与进程资源等指标，并提供可扩展的自定义度量体系。
 
 ## 特性 Highlights
@@ -14,7 +16,6 @@
 - 内建 FPS、帧时间、实体数量、系统/进程 CPU 与内存利用率等常用指标。
 - 提供平滑、量化与自动缩放设置，便于在不同负载下保持可读性。
 - 支持自定义 `PerfMetricProvider` 拓展自有监控数据，并通过插件一键注册。
-- 兼容桌面与 Web (wasm32) 目标，可在 Dev / Release / Web-Release 不同 profile 下工作。
 
 ## 安装 Installation
 

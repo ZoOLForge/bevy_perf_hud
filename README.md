@@ -6,6 +6,8 @@
 [![Documentation](https://docs.rs/bevy_perf_hud/badge.svg)](https://docs.rs/bevy_perf_hud)
 [![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/Seldom-SE/seldom_pixel#license)
 
+![Sep-24-2025 18-37-55](https://github.com/user-attachments/assets/a70f766d-db96-4f3d-9d20-39dac1f8270f)
+
 A configurable performance heads-up display (HUD) plugin for Bevy applications. Visualize frame pacing, entity counts,
 and resource usage in real time, with extensibility for your own metrics.
 
@@ -15,7 +17,6 @@ and resource usage in real time, with extensibility for your own metrics.
 - Built-in providers for FPS, frame time, entity count, and system/process CPU & memory usage.
 - Fine-grained control over smoothing, quantization, autoscaling, and appearance.
 - Extensible `PerfMetricProvider` trait for custom metrics that appear alongside built-ins.
-- Desktop and WebAssembly support with tuned profiles for dev, release, web-release, and CI.
 
 ## Installation
 
