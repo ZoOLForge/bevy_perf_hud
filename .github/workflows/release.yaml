@@ -37,6 +37,43 @@ jobs:
             echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Get changelog
+        id: changelog
+        run: |
+          # Extract version from tag (remove 'v' prefix)
+          VERSION="${{ steps.get_tag.outputs.tag_name }}"
+          VERSION_NUM=${VERSION#v}
+          
+          # Generate changelog from git commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s" HEAD)
+          fi
+          
+          # Create release notes
+          cat > release_notes.md << EOF
+          ## 🚀 What's New in $VERSION
+          
+          $CHANGELOG
+          
+          ## 📦 Installation
+          
+          Add to your \`Cargo.toml\`:
+          \`\`\`toml
+          [dependencies]
+          bevy_perf_hud = "$VERSION_NUM"
+          \`\`\`
+          
+          ## 🔗 Links
+          - [📚 Documentation](https://docs.rs/bevy_perf_hud/$VERSION_NUM)
+          - [📋 Changelog](https://github.com/ZoOLForge/bevy_perf_hud/blob/master/CHANGELOG.md)
+          EOF
+          
+          echo "Generated release notes:"
+          cat release_notes.md
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
