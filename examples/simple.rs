@@ -1,9 +1,6 @@
-use bevy::diagnostic::SystemInformationDiagnosticsPlugin;
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
-use bevy_perf_hud::{
-    BarConfig, BevyPerfHudPlugin, CurveConfig, HudHandles, MetricDefinition, Settings,
-};
+use bevy_perf_hud::{BevyPerfHudPlugin, HudHandles, Settings};
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
 enum HudMode {
@@ -304,118 +301,13 @@ fn toggle_hud_mode_on_f1(
 }
 
 fn main() {
-    let frame_metric = MetricDefinition {
-        id: "frame_time_ms".into(),
-        label: Some("FT:".into()),
-        unit: Some("ms".into()),
-        precision: 1,
-        color: Color::srgb(0.0, 1.0, 0.0),
-    };
-    let fps_metric = MetricDefinition {
-        id: "fps".into(),
-        label: Some("FPS:".into()),
-        unit: Some("fps".into()),
-        precision: 0,
-        color: Color::srgb(0.9, 0.0, 0.0),
-    };
-    let entity_metric = MetricDefinition {
-        id: "entity_count".into(),
-        label: Some("Ent:".into()),
-        unit: None,
-        precision: 0,
-        color: Color::srgb(0.1, 0.8, 0.4),
-    };
-    let sys_cpu_metric = MetricDefinition {
-        id: SystemInformationDiagnosticsPlugin::SYSTEM_CPU_USAGE
-            .as_str()
-            .to_owned(),
-        label: Some("SysCPU".into()),
-        unit: Some("%".into()),
-        precision: 1,
-        color: Color::srgb(0.96, 0.76, 0.18),
-    };
-    let sys_mem_metric = MetricDefinition {
-        id: SystemInformationDiagnosticsPlugin::SYSTEM_MEM_USAGE
-            .as_str()
-            .to_owned(),
-        label: Some("SysMem".into()),
-        unit: Some("%".into()),
-        precision: 1,
-        color: Color::srgb(0.28, 0.56, 0.89),
-    };
-
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
         .init_resource::<SpawnParams>()
         .init_resource::<RngState>()
         .init_resource::<CubeState>()
         .init_resource::<HudMode>()
-        .insert_resource(Settings {
-            enabled: true,
-            origin: Vec2::new(960.0, 16.0),
-            graph: bevy_perf_hud::GraphSettings {
-                enabled: true,
-                size: Vec2::new(200.0, 80.0),
-                label_width: 60.0,
-                min_y: 0.0,
-                max_y: 30.0,
-                thickness: 0.012,
-                bg_color: Color::srgba(0.0, 0.0, 0.0, 0.25),
-                y_ticks: 2,
-                border: bevy_perf_hud::GraphBorder {
-                    color: Color::srgba(1.0, 1.0, 1.0, 1.0),
-                    thickness: 2.0,
-                    left: true,
-                    bottom: true,
-                    right: false,
-                    top: false,
-                },
-                // Y-axis scale control: include zero, min span, margins, step quantization and smoothing
-                y_include_zero: true,
-                y_min_span: 5.0,
-                y_margin_frac: 0.10,
-                y_step_quantize: 5.0,
-                y_scale_smoothing: 0.3,
-                curve_defaults: bevy_perf_hud::CurveDefaults {
-                    autoscale: true,
-                    smoothing: 0.2,
-                    quantize_step: 1.0,
-                },
-                curves: vec![
-                    CurveConfig {
-                        metric: frame_metric.clone(),
-                        autoscale: None,
-                        smoothing: Some(0.25),
-                        quantize_step: Some(0.1),
-                    },
-                    CurveConfig {
-                        metric: fps_metric.clone(),
-                        autoscale: None,
-                        smoothing: None,
-                        quantize_step: None,
-                    },
-                ],
-            },
-            bars: bevy_perf_hud::BarsSettings {
-                enabled: true,
-                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-                show_value_default: true, // Default: show values and units
-                bars: vec![
-                    BarConfig {
-                        metric: sys_cpu_metric.clone(),
-                        show_value: Some(false), // Only show label, hide value
-                    },
-                    BarConfig {
-                        metric: sys_mem_metric.clone(),
-                        show_value: Some(false), // Only show label, hide value
-                    },
-                    BarConfig {
-                        metric: entity_metric.clone(),
-                        show_value: None, // Use default (show value)
-                    },
-                ],
-            },
-        })
+        .insert_resource(Settings::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "bevy_perf_hud demo".into(),

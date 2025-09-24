@@ -55,6 +55,112 @@ pub struct PerfHudSettings {
     pub bars: BarsSettings,
 }
 
+impl Default for PerfHudSettings {
+    fn default() -> Self {
+        let frame_metric = MetricDefinition {
+            id: "frame_time_ms".into(),
+            label: Some("FT:".into()),
+            unit: Some("ms".into()),
+            precision: 1,
+            color: Color::srgb(0.0, 1.0, 0.0),
+        };
+        let fps_metric = MetricDefinition {
+            id: "fps".into(),
+            label: Some("FPS:".into()),
+            unit: Some("fps".into()),
+            precision: 0,
+            color: Color::srgb(0.9, 0.0, 0.0),
+        };
+        let entity_metric = MetricDefinition {
+            id: "entity_count".into(),
+            label: Some("Ent:".into()),
+            unit: None,
+            precision: 0,
+            color: Color::srgb(0.1, 0.8, 0.4),
+        };
+        let sys_cpu_metric = MetricDefinition {
+            id: SYSTEM_CPU_USAGE_ID.to_owned(),
+            label: Some("SysCPU".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.96, 0.76, 0.18),
+        };
+        let sys_mem_metric = MetricDefinition {
+            id: SYSTEM_MEM_USAGE_ID.to_owned(),
+            label: Some("SysMem".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.28, 0.56, 0.89),
+        };
+
+        Self {
+            enabled: true,
+            origin: Vec2::new(960.0, 16.0),
+            graph: GraphSettings {
+                enabled: true,
+                size: Vec2::new(200.0, 80.0),
+                label_width: 60.0,
+                min_y: 0.0,
+                max_y: 30.0,
+                thickness: 0.012,
+                curves: vec![
+                    CurveConfig {
+                        metric: frame_metric.clone(),
+                        autoscale: None,
+                        smoothing: Some(0.25),
+                        quantize_step: Some(0.1),
+                    },
+                    CurveConfig {
+                        metric: fps_metric.clone(),
+                        autoscale: None,
+                        smoothing: None,
+                        quantize_step: None,
+                    },
+                ],
+                curve_defaults: CurveDefaults {
+                    autoscale: true,
+                    smoothing: 0.2,
+                    quantize_step: 1.0,
+                },
+                bg_color: Color::srgba(0.0, 0.0, 0.0, 0.25),
+                border: GraphBorder {
+                    color: Color::srgba(1.0, 1.0, 1.0, 1.0),
+                    thickness: 2.0,
+                    left: true,
+                    bottom: true,
+                    right: false,
+                    top: false,
+                },
+                y_ticks: 2,
+                y_include_zero: true,
+                y_min_span: 5.0,
+                y_margin_frac: 0.10,
+                y_step_quantize: 5.0,
+                y_scale_smoothing: 0.3,
+            },
+            bars: BarsSettings {
+                enabled: true,
+                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+                show_value_default: true,
+                bars: vec![
+                    BarConfig {
+                        metric: sys_cpu_metric,
+                        show_value: Some(false),
+                    },
+                    BarConfig {
+                        metric: sys_mem_metric,
+                        show_value: Some(false),
+                    },
+                    BarConfig {
+                        metric: entity_metric,
+                        show_value: None,
+                    },
+                ],
+            },
+        }
+    }
+}
+
 /// Graph (chart) settings
 #[derive(Clone)]
 pub struct GraphSettings {
@@ -94,7 +200,7 @@ pub struct GraphBorder {
 pub struct BarsSettings {
     pub enabled: bool,
     pub bars: Vec<BarConfig>,
-    pub bg_color: Color, // Bar background color (with alpha)
+    pub bg_color: Color,          // Bar background color (with alpha)
     pub show_value_default: bool, // Default setting for showing value and unit in bars
 }
 
