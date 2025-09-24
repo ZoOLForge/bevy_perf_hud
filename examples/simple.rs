@@ -1,3 +1,4 @@
+use bevy::diagnostic::SystemInformationDiagnosticsPlugin;
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
 use bevy_perf_hud::{
@@ -324,6 +325,42 @@ fn main() {
         precision: 0,
         color: Color::srgb(0.1, 0.8, 0.4),
     };
+    let sys_cpu_metric = MetricDefinition {
+        id: SystemInformationDiagnosticsPlugin::SYSTEM_CPU_USAGE
+            .as_str()
+            .to_owned(),
+        label: Some("SysCPU:".into()),
+        unit: Some("%".into()),
+        precision: 1,
+        color: Color::srgb(0.96, 0.76, 0.18),
+    };
+    let sys_mem_metric = MetricDefinition {
+        id: SystemInformationDiagnosticsPlugin::SYSTEM_MEM_USAGE
+            .as_str()
+            .to_owned(),
+        label: Some("SysMem:".into()),
+        unit: Some("%".into()),
+        precision: 1,
+        color: Color::srgb(0.28, 0.56, 0.89),
+    };
+    let proc_cpu_metric = MetricDefinition {
+        id: SystemInformationDiagnosticsPlugin::PROCESS_CPU_USAGE
+            .as_str()
+            .to_owned(),
+        label: Some("ProcCPU:".into()),
+        unit: Some("%".into()),
+        precision: 1,
+        color: Color::srgb(0.84, 0.35, 0.58),
+    };
+    let proc_mem_metric = MetricDefinition {
+        id: SystemInformationDiagnosticsPlugin::PROCESS_MEM_USAGE
+            .as_str()
+            .to_owned(),
+        label: Some("ProcMem:".into()),
+        unit: Some("GiB".into()),
+        precision: 2,
+        color: Color::srgb(0.34, 0.84, 0.62),
+    };
 
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
@@ -389,6 +426,18 @@ fn main() {
                     },
                     BarConfig {
                         metric: entity_metric.clone(),
+                    },
+                    BarConfig {
+                        metric: sys_cpu_metric.clone(),
+                    },
+                    BarConfig {
+                        metric: sys_mem_metric.clone(),
+                    },
+                    BarConfig {
+                        metric: proc_cpu_metric.clone(),
+                    },
+                    BarConfig {
+                        metric: proc_mem_metric.clone(),
                     },
                 ],
             },

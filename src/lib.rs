@@ -1,5 +1,8 @@
 use bevy::{
-    diagnostic::{DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin},
+    diagnostic::{
+        DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
+        SystemInformationDiagnosticsPlugin,
+    },
     prelude::*,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
     text::{TextColor, TextFont},
@@ -15,10 +18,20 @@ pub struct BevyPerfHudPlugin;
 
 impl Plugin for BevyPerfHudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(FrameTimeDiagnosticsPlugin::default())
-            .add_plugins(EntityCountDiagnosticsPlugin::default())
-            // Register UI materials (graph and bar)
-            .add_plugins(UiMaterialPlugin::<MultiLineGraphMaterial>::default())
+        if !app.is_plugin_added::<FrameTimeDiagnosticsPlugin>() {
+            app.add_plugins(FrameTimeDiagnosticsPlugin::default());
+        };
+
+        if !app.is_plugin_added::<EntityCountDiagnosticsPlugin>() {
+            app.add_plugins(EntityCountDiagnosticsPlugin::default());
+        };
+
+        if !app.is_plugin_added::<SystemInformationDiagnosticsPlugin>() {
+            app.add_plugins(SystemInformationDiagnosticsPlugin::default());
+        };
+
+        // Register UI materials (graph and bar)
+        app.add_plugins(UiMaterialPlugin::<MultiLineGraphMaterial>::default())
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
             .init_resource::<SampledValues>()
             .init_resource::<MetricProviders>()
@@ -191,6 +204,10 @@ impl MetricProviders {
         self.ensure_provider(FpsMetricProvider::default());
         self.ensure_provider(FrameTimeMetricProvider::default());
         self.ensure_provider(EntityCountMetricProvider::default());
+        self.ensure_provider(SystemCpuUsageMetricProvider::default());
+        self.ensure_provider(SystemMemUsageMetricProvider::default());
+        self.ensure_provider(ProcessCpuUsageMetricProvider::default());
+        self.ensure_provider(ProcessMemUsageMetricProvider::default());
     }
 
     /// 迭代所有提供者 / Iterate through all providers
@@ -272,6 +289,83 @@ impl PerfMetricProvider for EntityCountMetricProvider {
             .get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT)?
             .value()?;
         Some(entities as f32)
+    }
+}
+
+const SYSTEM_CPU_USAGE_ID: &str = "system/cpu_usage";
+const SYSTEM_MEM_USAGE_ID: &str = "system/mem_usage";
+const PROCESS_CPU_USAGE_ID: &str = "process/cpu_usage";
+const PROCESS_MEM_USAGE_ID: &str = "process/mem_usage";
+
+/// 系统 CPU 使用率提供者 / System CPU usage metric provider
+#[derive(Default)]
+pub struct SystemCpuUsageMetricProvider;
+
+impl PerfMetricProvider for SystemCpuUsageMetricProvider {
+    fn metric_id(&self) -> &str {
+        SYSTEM_CPU_USAGE_ID
+    }
+
+    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
+        let diagnostics = ctx.diagnostics?;
+        let usage = diagnostics
+            .get(&SystemInformationDiagnosticsPlugin::SYSTEM_CPU_USAGE)?
+            .value()?;
+        Some(usage as f32)
+    }
+}
+
+/// 系统内存使用率提供者 / System memory usage metric provider
+#[derive(Default)]
+pub struct SystemMemUsageMetricProvider;
+
+impl PerfMetricProvider for SystemMemUsageMetricProvider {
+    fn metric_id(&self) -> &str {
+        SYSTEM_MEM_USAGE_ID
+    }
+
+    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
+        let diagnostics = ctx.diagnostics?;
+        let usage = diagnostics
+            .get(&SystemInformationDiagnosticsPlugin::SYSTEM_MEM_USAGE)?
+            .value()?;
+        Some(usage as f32)
+    }
+}
+
+/// 进程 CPU 使用率提供者 / Process CPU usage metric provider
+#[derive(Default)]
+pub struct ProcessCpuUsageMetricProvider;
+
+impl PerfMetricProvider for ProcessCpuUsageMetricProvider {
+    fn metric_id(&self) -> &str {
+        PROCESS_CPU_USAGE_ID
+    }
+
+    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
+        let diagnostics = ctx.diagnostics?;
+        let usage = diagnostics
+            .get(&SystemInformationDiagnosticsPlugin::PROCESS_CPU_USAGE)?
+            .value()?;
+        Some(usage as f32)
+    }
+}
+
+/// 进程内存使用量提供者 / Process memory usage metric provider
+#[derive(Default)]
+pub struct ProcessMemUsageMetricProvider;
+
+impl PerfMetricProvider for ProcessMemUsageMetricProvider {
+    fn metric_id(&self) -> &str {
+        PROCESS_MEM_USAGE_ID
+    }
+
+    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
+        let diagnostics = ctx.diagnostics?;
+        let usage = diagnostics
+            .get(&SystemInformationDiagnosticsPlugin::PROCESS_MEM_USAGE)?
+            .value()?;
+        Some(usage as f32)
     }
 }
 
