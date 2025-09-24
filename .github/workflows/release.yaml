@@ -16,10 +16,94 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  ensure-ci-success:
+    name: Ensure CI Succeeded
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+    steps:
+      - name: Wait for CI workflow to succeed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const core = require('@actions/core');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            let tagName;
+            if (context.eventName === 'workflow_dispatch') {
+              tagName = context.payload.inputs.tag;
+              if (!tagName) {
+                core.setFailed('workflow_dispatch requires the tag input.');
+                return;
+              }
+            } else if (context.ref?.startsWith('refs/tags/')) {
+              tagName = context.ref.replace('refs/tags/', '');
+            } else {
+              core.setFailed(`Unsupported event: ${context.eventName}`);
+              return;
+            }
+
+            const ensureCommitSha = async () => {
+              const { data: ref } = await github.rest.git.getRef({ owner, repo, ref: `tags/${tagName}` });
+              let sha = ref.object.sha;
+              if (ref.object.type === 'tag') {
+                const { data: tag } = await github.rest.git.getTag({ owner, repo, tag_sha: sha });
+                sha = tag.object.sha;
+              }
+              return sha;
+            };
+
+            const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const ciWorkflowNames = ['CI'];
+            const maxAttempts = 40;
+            const delayMs = 15000;
+            const targetSha = await ensureCommitSha();
+
+            core.info(`Waiting for CI workflow to succeed on ${targetSha} (tag ${tagName}).`);
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              const { data } = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: targetSha,
+                per_page: 100,
+              });
+
+              const ciRuns = data.check_runs.filter(run =>
+                ciWorkflowNames.some(name => run.name?.startsWith(`${name} /`))
+              );
+
+              if (ciRuns.length === 0) {
+                core.info(`Attempt ${attempt}: CI check runs not found yet, waiting...`);
+                await wait(delayMs);
+                continue;
+              }
+
+              const incomplete = ciRuns.filter(run => run.status !== 'completed');
+              if (incomplete.length > 0) {
+                core.info(`Attempt ${attempt}: ${incomplete.length} CI checks still running, waiting...`);
+                await wait(delayMs);
+                continue;
+              }
+
+              const failed = ciRuns.filter(run => run.conclusion !== 'success');
+              if (failed.length > 0) {
+                core.setFailed(`CI checks failed: ${failed.map(run => `${run.name} (${run.conclusion})`).join(', ')}`);
+                return;
+              }
+
+              core.info('All CI checks succeeded.');
+              return;
+            }
+
+            core.setFailed('Timed out waiting for CI checks to complete.');
+
   # Create GitHub Release
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    needs: ensure-ci-success
     permissions:
       contents: write
     outputs:
@@ -126,11 +210,6 @@ jobs:
             echo "Error: Tag version ($TAG_VERSION) does not match Cargo.toml version ($CARGO_VERSION)"
             exit 1
           fi
-
-      - name: Run tests before publishing
-        run: |
-          cargo test --verbose
-          cargo test --doc --verbose
 
       - name: Check package
         run: cargo package --verbose

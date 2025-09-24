@@ -58,13 +58,14 @@ const PROCESS_MEM_USAGE_ID: &str = "process/mem_usage";
 /// - System registration for HUD updates
 ///
 /// # Usage
-/// ```rust
+/// ```no_run
 /// use bevy::prelude::*;
 /// use bevy_perf_hud::BevyPerfHudPlugin;
 ///
-/// App::new()
-///     .add_plugins(BevyPerfHudPlugin)
-///     .run();
+/// let mut app = App::new();
+/// app.add_plugins(DefaultPlugins);
+/// app.add_plugins(BevyPerfHudPlugin::default());
+/// app.run();
 /// ```
 #[derive(Default)]
 pub struct BevyPerfHudPlugin;
@@ -620,13 +621,27 @@ impl MetricProviders {
 /// to your Bevy application without needing to manually access resources.
 ///
 /// # Example
-/// ```rust
+/// ```no_run
 /// use bevy::prelude::*;
-/// use bevy_perf_hud::PerfHudAppExt;
+/// use bevy_perf_hud::{PerfHudAppExt, PerfMetricProvider, MetricSampleContext};
 ///
-/// App::new()
-///     .add_perf_metric_provider(MyCustomProvider::default())
-///     .run();
+/// #[derive(Default)]
+/// struct MyCustomProvider;
+///
+/// impl PerfMetricProvider for MyCustomProvider {
+///     fn metric_id(&self) -> &str {
+///         "custom/example_metric"
+///     }
+///
+///     fn sample(&mut self, _ctx: MetricSampleContext) -> Option<f32> {
+///         Some(42.0)
+///     }
+/// }
+///
+/// let mut app = App::new();
+/// app.add_plugins(DefaultPlugins);
+/// app.add_perf_metric_provider(MyCustomProvider::default());
+/// app.run();
 /// ```
 pub trait PerfHudAppExt {
     /// Add a custom metric provider to the application.
