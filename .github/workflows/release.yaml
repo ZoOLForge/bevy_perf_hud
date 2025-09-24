@@ -20,6 +20,8 @@ jobs:
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       tag_name: ${{ steps.get_tag.outputs.tag_name }}
     steps:
@@ -175,6 +177,8 @@ jobs:
   update-docs:
     name: Update Documentation
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     needs: [github-release, publish-crates]
     steps:
       - name: Checkout sources
@@ -207,6 +211,8 @@ jobs:
   trigger-docs-deploy:
     name: Trigger Documentation Deploy
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     needs: [github-release, publish-crates]
     steps:
       - name: Trigger deploy-page workflow
