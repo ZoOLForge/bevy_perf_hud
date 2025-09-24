@@ -1187,6 +1187,3 @@ fn update_graph_and_bars(
         }
     }
 }
-
-// Re-export helper API
-pub use PerfHudSettings as Settings;

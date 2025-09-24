@@ -1,6 +1,6 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
-use bevy_perf_hud::{BevyPerfHudPlugin, HudHandles, Settings};
+use bevy_perf_hud::{BevyPerfHudPlugin, HudHandles, PerfHudSettings};
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
 enum HudMode {
@@ -307,7 +307,10 @@ fn main() {
         .init_resource::<RngState>()
         .init_resource::<CubeState>()
         .init_resource::<HudMode>()
-        .insert_resource(Settings::default())
+        .insert_resource(PerfHudSettings {
+            origin: Vec2::new(960.0, 16.0),
+            ..default()
+        })
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "bevy_perf_hud demo".into(),
