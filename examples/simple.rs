@@ -333,10 +333,10 @@ fn main() {
         .init_resource::<HudMode>()
         .insert_resource(Settings {
             enabled: true,
-            origin: Vec2::new(16.0, 16.0),
+            origin: Vec2::new(960.0, 16.0),
             graph: bevy_perf_hud::GraphSettings {
                 enabled: true,
-                size: Vec2::new(400.0, 120.0),
+                size: Vec2::new(200.0, 100.0),
                 label_width: 60.0,
                 min_y: 0.0,
                 max_y: 30.0,

@@ -302,87 +302,93 @@ pub struct GraphScaleState {
     pub max_y: f32,
 }
 
-// UI material: multi-line graph
-#[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
-pub struct MultiLineGraphMaterial {
-    #[uniform(0)]
-    pub params: MultiLineGraphParams,
-}
+mod shader_params {
+    #![allow(dead_code)]
 
-impl UiMaterial for MultiLineGraphMaterial {
-    fn fragment_shader() -> ShaderRef {
-        ShaderRef::Path("shaders/multiline_graph.wgsl".into())
+    use super::*;
+
+    #[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
+    pub struct MultiLineGraphMaterial {
+        #[uniform(0)]
+        pub params: MultiLineGraphParams,
     }
-}
 
-#[derive(Debug, Clone, ShaderType)]
-pub struct MultiLineGraphParams {
-    pub values: [[Vec4; SAMPLES_VEC4]; MAX_CURVES],
-    pub length: u32,
-    pub min_y: f32,
-    pub max_y: f32,
-    pub thickness: f32,
-    pub bg_color: Vec4,
-    pub border_color: Vec4,
-    pub border_thickness: f32,
-    pub border_thickness_uv_x: f32,
-    pub border_thickness_uv_y: f32,
-    pub border_left: u32,
-    pub border_bottom: u32,
-    pub border_right: u32,
-    pub border_top: u32,
-    pub colors: [Vec4; MAX_CURVES],
-    pub curve_count: u32,
-}
+    impl UiMaterial for MultiLineGraphMaterial {
+        fn fragment_shader() -> ShaderRef {
+            ShaderRef::Path("shaders/multiline_graph.wgsl".into())
+        }
+    }
 
-impl Default for MultiLineGraphParams {
-    fn default() -> Self {
-        Self {
-            values: [[Vec4::ZERO; SAMPLES_VEC4]; MAX_CURVES],
-            length: 0,
-            min_y: 0.0,
-            max_y: 1.0,
-            thickness: 0.01,
-            bg_color: Vec4::ZERO,
-            border_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
-            border_thickness: 2.0,
-            border_thickness_uv_x: 0.003,
-            border_thickness_uv_y: 0.003,
-            border_left: 1,
-            border_bottom: 1,
-            border_right: 0,
-            border_top: 0,
-            colors: [Vec4::ZERO; MAX_CURVES],
-            curve_count: 0,
+    #[derive(Debug, Clone, ShaderType)]
+    pub struct MultiLineGraphParams {
+        pub values: [[Vec4; super::SAMPLES_VEC4]; super::MAX_CURVES],
+        pub length: u32,
+        pub min_y: f32,
+        pub max_y: f32,
+        pub thickness: f32,
+        pub bg_color: Vec4,
+        pub border_color: Vec4,
+        pub border_thickness: f32,
+        pub border_thickness_uv_x: f32,
+        pub border_thickness_uv_y: f32,
+        pub border_left: u32,
+        pub border_bottom: u32,
+        pub border_right: u32,
+        pub border_top: u32,
+        pub colors: [Vec4; super::MAX_CURVES],
+        pub curve_count: u32,
+    }
+
+    impl Default for MultiLineGraphParams {
+        fn default() -> Self {
+            Self {
+                values: [[Vec4::ZERO; super::SAMPLES_VEC4]; super::MAX_CURVES],
+                length: 0,
+                min_y: 0.0,
+                max_y: 1.0,
+                thickness: 0.01,
+                bg_color: Vec4::ZERO,
+                border_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                border_thickness: 2.0,
+                border_thickness_uv_x: 0.003,
+                border_thickness_uv_y: 0.003,
+                border_left: 1,
+                border_bottom: 1,
+                border_right: 0,
+                border_top: 0,
+                colors: [Vec4::ZERO; super::MAX_CURVES],
+                curve_count: 0,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, ShaderType)]
+    pub struct BarParams {
+        pub value: f32,
+        pub r: f32,
+        pub g: f32,
+        pub b: f32,
+        pub a: f32,
+        pub bg_r: f32,
+        pub bg_g: f32,
+        pub bg_b: f32,
+        pub bg_a: f32,
+    }
+
+    #[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
+    pub struct BarMaterial {
+        #[uniform(0)]
+        pub params: BarParams,
+    }
+
+    impl UiMaterial for BarMaterial {
+        fn fragment_shader() -> ShaderRef {
+            ShaderRef::Path("shaders/bar.wgsl".into())
         }
     }
 }
 
-// UI material: horizontal fill bar
-#[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
-pub struct BarMaterial {
-    #[uniform(0)]
-    pub params: BarParams,
-}
-
-impl UiMaterial for BarMaterial {
-    fn fragment_shader() -> ShaderRef {
-        ShaderRef::Path("shaders/bar.wgsl".into())
-    }
-}
-
-#[derive(Debug, Clone, ShaderType)]
-pub struct BarParams {
-    pub value: f32,
-    pub r: f32,
-    pub g: f32,
-    pub b: f32,
-    pub a: f32,
-    pub bg_r: f32,
-    pub bg_g: f32,
-    pub bg_b: f32,
-    pub bg_a: f32,
-}
+use shader_params::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams};
 
 fn setup_hud(
     mut commands: Commands,
@@ -410,6 +416,7 @@ fn setup_hud(
             position_type: PositionType::Absolute,
             top: Val::Px(s.origin.y),
             left: Val::Px(s.origin.x),
+            flex_direction: FlexDirection::Column,
             ..default()
         },))
         .id();
@@ -473,7 +480,7 @@ fn setup_hud(
                     Text::new(""),
                     TextColor(Color::WHITE),
                     TextFont {
-                        font_size: 12.0,
+                        font_size: 10.0,
                         ..default()
                     },
                     Node {
@@ -509,35 +516,37 @@ fn setup_hud(
         graph_handle_opt = Some(gh);
     }
 
-    // Bars container
+    // Bars container placed below the graph / 将柱状图容器放在图表下方
     let mut bars_root_opt: Option<Entity> = None;
     let mut bar_entities = Vec::new();
     let mut bar_materials = Vec::new();
     let mut bar_labels = Vec::new();
     if s.bars.enabled && !s.bars.bars.is_empty() {
+        let column_count = 2;
+        let column_width = (s.graph.size.x - 12.0) / column_count as f32;
+
         let bars_root = commands
             .spawn((Node {
                 width: Val::Px(s.graph.size.x),
-                height: Val::Px(60.0),
+                height: Val::Px((s.bars.bars.len() as f32 / column_count as f32).ceil() * 24.0),
                 flex_direction: FlexDirection::Column,
+                margin: UiRect {
+                    left: Val::Px(s.graph.label_width.max(40.0)),
+                    top: Val::Px(4.0),
+                    ..default()
+                },
                 ..default()
             },))
             .id();
         commands.entity(bars_root).insert(ChildOf(root));
         bars_root_opt = Some(bars_root);
 
-        for bar_cfg in &s.bars.bars {
-            let base_label = bar_cfg
-                .metric
-                .label
-                .clone()
-                .unwrap_or_else(|| bar_cfg.metric.id.clone());
-
-            // Single bar row (label + bar)
+        for chunk in s.bars.bars.chunks(column_count) {
             let row = commands
                 .spawn((Node {
                     width: Val::Px(s.graph.size.x),
-                    height: Val::Px(18.0),
+                    height: Val::Px(24.0),
+                    flex_direction: FlexDirection::Row,
                     margin: UiRect {
                         top: Val::Px(4.0),
                         ..default()
@@ -547,54 +556,81 @@ fn setup_hud(
                 .id();
             commands.entity(row).insert(ChildOf(bars_root));
 
-            // Bar material container
-            let mat = bar_mats.add(BarMaterial {
-                params: BarParams {
-                    value: 0.0,
-                    r: bar_cfg.metric.color.to_linear().to_vec4().x,
-                    g: bar_cfg.metric.color.to_linear().to_vec4().y,
-                    b: bar_cfg.metric.color.to_linear().to_vec4().z,
-                    a: bar_cfg.metric.color.to_linear().to_vec4().w,
-                    bg_r: s.bars.bg_color.to_linear().to_vec4().x,
-                    bg_g: s.bars.bg_color.to_linear().to_vec4().y,
-                    bg_b: s.bars.bg_color.to_linear().to_vec4().z,
-                    bg_a: s.bars.bg_color.to_linear().to_vec4().w,
-                },
-            });
-            let bar_entity = commands
-                .spawn((
-                    MaterialNode(mat.clone()),
-                    Node {
-                        width: Val::Px(s.graph.size.x - 12.0),
-                        height: Val::Px(16.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(bar_entity).insert(ChildOf(row));
+            for (col_idx, bar_cfg) in chunk.iter().enumerate() {
+                let base_label = bar_cfg
+                    .metric
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| bar_cfg.metric.id.clone());
 
-            // Overlay label inside bar / 在柱条内部覆写标签
-            let bar_label = commands
-                .spawn((
-                    Text::new(base_label),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 12.0,
+                let column = commands
+                    .spawn((Node {
+                        width: Val::Px(column_width),
+                        height: Val::Px(24.0),
+                        margin: UiRect {
+                            right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
+                                Val::Px(0.0)
+                            } else {
+                                Val::Px(8.0)
+                            },
+                            ..default()
+                        },
+                        flex_direction: FlexDirection::Column,
                         ..default()
-                    },
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(6.0),
-                        top: Val::Px(2.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(bar_label).insert(ChildOf(bar_entity));
+                    },))
+                    .id();
+                commands.entity(column).insert(ChildOf(row));
 
-            bar_entities.push(bar_entity);
-            bar_materials.push(mat);
-            bar_labels.push(bar_label);
+                let mat = bar_mats.add(BarMaterial {
+                    params: BarParams {
+                        value: 0.0,
+                        r: bar_cfg.metric.color.to_linear().to_vec4().x,
+                        g: bar_cfg.metric.color.to_linear().to_vec4().y,
+                        b: bar_cfg.metric.color.to_linear().to_vec4().z,
+                        a: bar_cfg.metric.color.to_linear().to_vec4().w,
+                        bg_r: s.bars.bg_color.to_linear().to_vec4().x,
+                        bg_g: s.bars.bg_color.to_linear().to_vec4().y,
+                        bg_b: s.bars.bg_color.to_linear().to_vec4().z,
+                        bg_a: s.bars.bg_color.to_linear().to_vec4().w,
+                    },
+                });
+
+                let bar_entity = commands
+                    .spawn((
+                        MaterialNode(mat.clone()),
+                        Node {
+                            width: Val::Px(column_width),
+                            height: Val::Px(16.0),
+                            ..default()
+                        },
+                    ))
+                    .id();
+                commands.entity(bar_entity).insert(ChildOf(column));
+
+                let bar_label = commands
+                    .spawn((
+                        Text::new(base_label),
+                        TextColor(Color::WHITE),
+                        TextFont {
+                            font_size: 10.0,
+                            ..default()
+                        },
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(6.0),
+                            top: Val::Px(2.0),
+                            width: Val::Px(column_width - 12.0),
+                            overflow: Overflow::hidden(),
+                            ..default()
+                        },
+                    ))
+                    .id();
+                commands.entity(bar_label).insert(ChildOf(bar_entity));
+
+                bar_entities.push(bar_entity);
+                bar_materials.push(mat);
+                bar_labels.push(bar_label);
+            }
         }
     }
 
@@ -745,7 +781,7 @@ fn update_graph_and_bars(
         target_max = target_max.max(0.0);
     }
 
-    let mut span = (target_max - target_min)
+    let span = (target_max - target_min)
         .abs()
         .max(s.graph.y_min_span.max(1e-3));
     if target_max - target_min < span {
@@ -759,8 +795,6 @@ fn update_graph_and_bars(
     let margin = span * margin_frac;
     target_min -= margin;
     target_max += margin;
-    span = (target_max - target_min).max(1e-3);
-
     // Step quantization
     if s.graph.y_step_quantize > 0.0 {
         let step = s.graph.y_step_quantize;
