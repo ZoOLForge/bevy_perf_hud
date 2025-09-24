@@ -624,7 +624,7 @@ fn setup_hud(
         let bars_root = commands
             .spawn((Node {
                 width: Val::Px(s.graph.size.x),
-                height: Val::Px((s.bars.bars.len() as f32 / column_count as f32).ceil() * 24.0),
+                height: Val::Px((s.bars.bars.len() as f32 / column_count as f32).ceil() * 25.0),
                 flex_direction: FlexDirection::Column,
                 margin: UiRect {
                     left: Val::Px(s.graph.label_width.max(40.0)),
@@ -644,7 +644,7 @@ fn setup_hud(
                     height: Val::Px(24.0),
                     flex_direction: FlexDirection::Row,
                     margin: UiRect {
-                        top: Val::Px(4.0),
+                        top: Val::Px(1.0),
                         ..default()
                     },
                     ..default()
@@ -696,7 +696,7 @@ fn setup_hud(
                         MaterialNode(mat.clone()),
                         Node {
                             width: Val::Px(column_width),
-                            height: Val::Px(16.0),
+                            height: Val::Px(20.0),
                             ..default()
                         },
                     ))
@@ -714,7 +714,7 @@ fn setup_hud(
                         Node {
                             position_type: PositionType::Absolute,
                             left: Val::Px(6.0),
-                            top: Val::Px(2.0),
+                            top: Val::Px(5.0),
                             width: Val::Px(column_width - 12.0),
                             overflow: Overflow::hidden(),
                             ..default()

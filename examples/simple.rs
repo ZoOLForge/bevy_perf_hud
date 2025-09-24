@@ -329,7 +329,7 @@ fn main() {
         id: SystemInformationDiagnosticsPlugin::SYSTEM_CPU_USAGE
             .as_str()
             .to_owned(),
-        label: Some("SysCPU:".into()),
+        label: Some("SysCPU".into()),
         unit: Some("%".into()),
         precision: 1,
         color: Color::srgb(0.96, 0.76, 0.18),
@@ -338,28 +338,10 @@ fn main() {
         id: SystemInformationDiagnosticsPlugin::SYSTEM_MEM_USAGE
             .as_str()
             .to_owned(),
-        label: Some("SysMem:".into()),
+        label: Some("SysMem".into()),
         unit: Some("%".into()),
         precision: 1,
         color: Color::srgb(0.28, 0.56, 0.89),
-    };
-    let proc_cpu_metric = MetricDefinition {
-        id: SystemInformationDiagnosticsPlugin::PROCESS_CPU_USAGE
-            .as_str()
-            .to_owned(),
-        label: Some("ProcCPU:".into()),
-        unit: Some("%".into()),
-        precision: 1,
-        color: Color::srgb(0.84, 0.35, 0.58),
-    };
-    let proc_mem_metric = MetricDefinition {
-        id: SystemInformationDiagnosticsPlugin::PROCESS_MEM_USAGE
-            .as_str()
-            .to_owned(),
-        label: Some("ProcMem:".into()),
-        unit: Some("GiB".into()),
-        precision: 2,
-        color: Color::srgb(0.34, 0.84, 0.62),
     };
 
     App::new()
@@ -373,7 +355,7 @@ fn main() {
             origin: Vec2::new(960.0, 16.0),
             graph: bevy_perf_hud::GraphSettings {
                 enabled: true,
-                size: Vec2::new(200.0, 100.0),
+                size: Vec2::new(200.0, 80.0),
                 label_width: 60.0,
                 min_y: 0.0,
                 max_y: 30.0,
@@ -420,14 +402,6 @@ fn main() {
                 show_value_default: true, // Default: show values and units
                 bars: vec![
                     BarConfig {
-                        metric: frame_metric.clone(),
-                        show_value: None, // Use default (show value)
-                    },
-                    BarConfig {
-                        metric: fps_metric.clone(),
-                        show_value: None, // Use default (show value)
-                    },
-                    BarConfig {
                         metric: sys_cpu_metric.clone(),
                         show_value: Some(false), // Only show label, hide value
                     },
@@ -435,14 +409,6 @@ fn main() {
                         metric: sys_mem_metric.clone(),
                         show_value: Some(false), // Only show label, hide value
                     },
-                    // BarConfig {
-                    //     metric: proc_cpu_metric.clone(),
-                    //     show_value: None,
-                    // },
-                    // BarConfig {
-                    //     metric: proc_mem_metric.clone(),
-                    //     show_value: None,
-                    // },
                     BarConfig {
                         metric: entity_metric.clone(),
                         show_value: None, // Use default (show value)
