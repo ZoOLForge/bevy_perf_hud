@@ -51,6 +51,8 @@ impl PerfMetricProvider for NetworkLatencyMetric {
 fn main() {
     // 基于默认 HUD 配置追加网络延迟度量 / Extend default HUD with network latency metric
     let mut settings = PerfHudSettings::default();
+    // 将 HUD 移动到屏幕左上角，确保在 960px 宽度窗口中可见
+    settings.origin = Vec2::new(16.0, 16.0);
     let latency_metric = MetricDefinition {
         id: CUSTOM_METRIC_ID.into(),
         label: Some("Latency".into()),
@@ -82,7 +84,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "bevy_perf_hud custom metric".into(),
-                resolution: (960., 540.).into(),
+                resolution: (1200., 600.).into(), // 增加窗口宽度以更好地容纳 HUD
                 ..default()
             }),
             ..default()
@@ -100,7 +102,7 @@ fn setup_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
     let font = asset_server.load("fonts/FiraSans-Bold.ttf");
     // 屏幕指引文本 / On-screen guidance text
     commands.spawn((
-        Text::new("Custom metric: simulated network latency (ms)\n自定义度量：模拟网络延迟 (毫秒)"),
+        Text::new("Custom metric: simulated network latency (ms)"),
         TextFont {
             font,
             font_size: 20.0,
