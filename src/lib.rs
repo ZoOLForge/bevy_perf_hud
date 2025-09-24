@@ -1,3 +1,11 @@
+//! Bevy Performance HUD Plugin
+//!
+//! A comprehensive performance monitoring overlay for Bevy applications that displays:
+//! - Real-time performance graphs with configurable metrics
+//! - System resource usage bars (CPU, memory)
+//! - Custom metric tracking with extensible provider system
+//! - Configurable visual appearance and positioning
+
 use bevy::{
     diagnostic::{
         DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
@@ -12,12 +20,59 @@ use bevy::{
 };
 use std::collections::HashMap;
 
-/// Plugin for displaying performance HUD
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+/// Maximum number of samples to store in the history buffer for graph rendering
+const MAX_SAMPLES: usize = 256;
+
+/// Maximum number of curves that can be displayed simultaneously in a graph
+const MAX_CURVES: usize = 6;
+
+/// Number of Vec4 elements needed to pack all samples for shader
+const SAMPLES_VEC4: usize = MAX_SAMPLES / 4;
+
+/// Metric ID for system-wide CPU usage percentage
+const SYSTEM_CPU_USAGE_ID: &str = "system/cpu_usage";
+
+/// Metric ID for system-wide memory usage percentage
+const SYSTEM_MEM_USAGE_ID: &str = "system/mem_usage";
+
+/// Metric ID for process-specific CPU usage percentage
+const PROCESS_CPU_USAGE_ID: &str = "process/cpu_usage";
+
+/// Metric ID for process-specific memory usage in bytes
+const PROCESS_MEM_USAGE_ID: &str = "process/mem_usage";
+
+// ============================================================================
+// CORE PLUGIN
+// ============================================================================
+
+/// The main plugin for the performance HUD system.
+///
+/// This plugin automatically sets up all necessary components:
+/// - Diagnostic plugins for gathering performance metrics
+/// - UI material plugins for custom shaders
+/// - Resource initialization for state management
+/// - System registration for HUD updates
+///
+/// # Usage
+/// ```rust
+/// use bevy::prelude::*;
+/// use bevy_perf_hud::BevyPerfHudPlugin;
+///
+/// App::new()
+///     .add_plugins(BevyPerfHudPlugin)
+///     .run();
+/// ```
 #[derive(Default)]
 pub struct BevyPerfHudPlugin;
 
 impl Plugin for BevyPerfHudPlugin {
     fn build(&self, app: &mut App) {
+        // Add diagnostic plugins if not already present
+        // These provide the core metrics like FPS, frame time, entity count, etc.
         if !app.is_plugin_added::<FrameTimeDiagnosticsPlugin>() {
             app.add_plugins(FrameTimeDiagnosticsPlugin::default());
         };
@@ -30,28 +85,60 @@ impl Plugin for BevyPerfHudPlugin {
             app.add_plugins(SystemInformationDiagnosticsPlugin::default());
         };
 
-        // Register UI materials (graph and bar)
+        // Register custom UI materials for graph and bar rendering
+        // These use custom shaders for efficient real-time performance visualization
         app.add_plugins(UiMaterialPlugin::<MultiLineGraphMaterial>::default())
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
-            .init_resource::<SampledValues>()
-            .init_resource::<MetricProviders>()
-            .init_resource::<HistoryBuffers>()
-            .init_resource::<GraphScaleState>()
-            .add_systems(Startup, setup_hud)
-            .add_systems(Update, (sample_diagnostics, update_graph_and_bars).chain());
+            // Initialize core resources for HUD state management
+            .init_resource::<SampledValues>()     // Current metric values
+            .init_resource::<MetricProviders>()   // Registry of metric sources
+            .init_resource::<HistoryBuffers>()    // Historical data for graphs
+            .init_resource::<GraphScaleState>()   // Dynamic scaling state
+            // Register systems for HUD lifecycle
+            .add_systems(Startup, setup_hud)      // Create HUD entities on startup
+            .add_systems(Update, (sample_diagnostics, update_graph_and_bars).chain()); // Update loop
 
+        // Register default metric providers (FPS, frame time, entity count, system info)
         app.world_mut()
             .resource_mut::<MetricProviders>()
             .ensure_default_entries();
     }
 }
 
-/// Configuration for performance HUD
+// ============================================================================
+// CONFIGURATION/SETTINGS TYPES
+// ============================================================================
+//
+// This section contains all the configuration structures that define how the
+// performance HUD should appear and behave. These are typically set up once
+// during application initialization and can be modified at runtime.
+
+/// Main configuration resource for the performance HUD.
+///
+/// This resource controls all aspects of the HUD's appearance and behavior.
+/// Insert this resource into your Bevy app to customize the HUD settings.
+///
+/// # Example
+/// ```rust
+/// use bevy::prelude::*;
+/// use bevy_perf_hud::PerfHudSettings;
+///
+/// App::new()
+///     .insert_resource(PerfHudSettings {
+///         origin: Vec2::new(10.0, 10.0), // Top-left corner
+///         ..default()
+///     })
+///     .run();
+/// ```
 #[derive(Resource)]
 pub struct PerfHudSettings {
+    /// Whether the HUD is currently enabled and visible
     pub enabled: bool,
+    /// Screen position (in pixels) where the HUD should be anchored
     pub origin: Vec2,
+    /// Configuration for the performance graph display
     pub graph: GraphSettings,
+    /// Configuration for the performance bars display
     pub bars: BarsSettings,
 }
 
@@ -161,109 +248,200 @@ impl Default for PerfHudSettings {
     }
 }
 
-/// Graph (chart) settings
+/// Configuration for the performance graph (chart) display.
+///
+/// Controls how performance metrics are visualized as time-series graphs,
+/// including appearance, scaling behavior, and which metrics to show.
 #[derive(Clone)]
 pub struct GraphSettings {
+    /// Whether the graph is enabled and should be rendered
     pub enabled: bool,
+    /// Size of the graph area in pixels (width, height)
     pub size: Vec2,
-    pub label_width: f32, // Left label width (pixels)
+    /// Width in pixels reserved for metric labels on the left side
+    pub label_width: f32,
+    /// Fixed minimum Y-axis value (used when autoscale is disabled)
     pub min_y: f32,
+    /// Fixed maximum Y-axis value (used when autoscale is disabled)
     pub max_y: f32,
+    /// Line thickness for graph curves (0.0-1.0 in normalized coordinates)
     pub thickness: f32,
+    /// List of curves (metrics) to display on this graph
     pub curves: Vec<CurveConfig>,
+    /// Default settings for curves that don't specify their own values
     pub curve_defaults: CurveDefaults,
-    pub bg_color: Color, // Graph background color (with alpha)
-    // Border configuration
+    /// Background color of the graph area (supports transparency)
+    pub bg_color: Color,
+    /// Border configuration for the graph edges
     pub border: GraphBorder,
-    // Y-axis tick count (>=2). Unit/precision handled per curve
+    /// Number of horizontal grid lines to display (minimum 2)
     pub y_ticks: u32,
-    // Y-axis scale controls
-    pub y_include_zero: bool,   // Force include 0
-    pub y_min_span: f32,        // Minimum span to avoid tiny ranges
-    pub y_margin_frac: f32,     // Vertical margin fraction (0..0.45)
-    pub y_step_quantize: f32,   // Quantize min/max to step when > 0
-    pub y_scale_smoothing: f32, // Scale smoothing factor (0..1)
+    /// Whether to always include zero in the Y-axis range
+    pub y_include_zero: bool,
+    /// Minimum Y-axis range to prevent overly compressed scales
+    pub y_min_span: f32,
+    /// Additional margin around data as fraction of range (0.0-0.45)
+    pub y_margin_frac: f32,
+    /// Step size for quantizing Y-axis min/max values (0 = disabled)
+    pub y_step_quantize: f32,
+    /// Smoothing factor for Y-axis scale transitions (0.0-1.0)
+    pub y_scale_smoothing: f32,
 }
 
+/// Configuration for graph border appearance.
 #[derive(Clone)]
 pub struct GraphBorder {
-    pub color: Color,   // Color (with alpha)
-    pub thickness: f32, // Thickness (pixels)
+    /// Color of the border lines (supports transparency)
+    pub color: Color,
+    /// Thickness of border lines in pixels
+    pub thickness: f32,
+    /// Whether to draw the left border
     pub left: bool,
+    /// Whether to draw the bottom border
     pub bottom: bool,
+    /// Whether to draw the right border
     pub right: bool,
+    /// Whether to draw the top border
     pub top: bool,
 }
 
-/// Bars settings
+/// Configuration for the performance bars display.
+///
+/// Performance bars show current metric values as horizontal progress bars,
+/// useful for displaying things like CPU usage, memory usage, etc.
 #[derive(Clone)]
 pub struct BarsSettings {
+    /// Whether the bars are enabled and should be rendered
     pub enabled: bool,
+    /// List of bars (metrics) to display
     pub bars: Vec<BarConfig>,
-    pub bg_color: Color,          // Bar background color (with alpha)
-    pub show_value_default: bool, // Default setting for showing value and unit in bars
+    /// Background color for all bars (supports transparency)
+    pub bg_color: Color,
+    /// Default setting for whether bars should show their numeric values
+    pub show_value_default: bool,
 }
 
-/// Configuration for a performance curve
+/// Configuration for a single curve (line) in a performance graph.
+///
+/// Each curve represents one metric tracked over time, such as FPS or frame time.
 #[derive(Clone)]
 pub struct CurveConfig {
+    /// The metric this curve represents (ID, label, color, etc.)
     pub metric: MetricDefinition,
+    /// Whether this curve should use autoscaling (None = use graph default)
     pub autoscale: Option<bool>,
-    pub smoothing: Option<f32>, // 0..1 exponential smoothing; 0=no filter, 1=follow new value
-    pub quantize_step: Option<f32>, // >0 rounds to nearest multiple of this step
+    /// Exponential smoothing factor 0.0-1.0 (None = use graph default)
+    /// 0.0 = no smoothing, 1.0 = follow new values immediately
+    pub smoothing: Option<f32>,
+    /// Quantization step for values (None = use graph default)
+    /// Values are rounded to nearest multiple of this step
+    pub quantize_step: Option<f32>,
 }
 
+/// Default values for curve configuration options.
+///
+/// These values are used when individual curves don't specify their own settings.
 #[derive(Clone)]
 pub struct CurveDefaults {
+    /// Default autoscale setting for curves
     pub autoscale: bool,
+    /// Default smoothing factor for curves (0.0-1.0)
     pub smoothing: f32,
+    /// Default quantization step for curve values
     pub quantize_step: f32,
 }
 
-/// Configuration for a performance bar
+/// Configuration for a single performance bar.
+///
+/// Each bar represents one metric displayed as a horizontal progress indicator.
 #[derive(Clone)]
 pub struct BarConfig {
+    /// The metric this bar represents (ID, label, color, etc.)
     pub metric: MetricDefinition,
-    pub show_value: Option<bool>, // Whether to show value and unit, defaults to show_value_default
+    /// Whether to show numeric value and unit (None = use bars default)
+    pub show_value: Option<bool>,
 }
 
+/// Definition of a performance metric for display purposes.
+///
+/// This structure defines how a metric should be presented in the HUD,
+/// including its visual appearance and formatting options.
 #[derive(Clone)]
 pub struct MetricDefinition {
+    /// Unique identifier for this metric (must match provider metric_id)
     pub id: String,
+    /// Display label for this metric (None = use ID as label)
     pub label: Option<String>,
+    /// Unit string to show after values (e.g., "ms", "fps", "%")
     pub unit: Option<String>,
+    /// Number of decimal places to display in values
     pub precision: u32,
+    /// Color for this metric's curve/bar
     pub color: Color,
 }
 
+// ============================================================================
+// RUNTIME STATE/RESOURCES
+// ============================================================================
+//
+// This section contains resources and components that manage the runtime state
+// of the performance HUD. These are created and maintained automatically by
+// the plugin systems and typically don't need direct user interaction.
+
+/// Handle to a graph label entity, linking it to its metric.
+///
+/// Used internally to update label text and colors for graph metrics.
 #[derive(Clone)]
 pub struct GraphLabelHandle {
+    /// ID of the metric this label represents
     pub metric_id: String,
+    /// Bevy entity ID for the text label
     pub entity: Entity,
 }
 
-/// Handles to HUD entities
+/// Resource containing handles to all HUD-related entities and materials.
+///
+/// This resource is created automatically by the plugin and contains references
+/// to all the UI entities and materials that make up the performance HUD.
+/// Used internally by systems to update HUD appearance and content.
 #[derive(Resource)]
 pub struct HudHandles {
+    /// Entity for the graph row container (contains labels + graph)
     pub graph_row: Option<Entity>,
+    /// Entity for the actual graph rendering area
     pub graph_entity: Option<Entity>,
+    /// Material handle for the graph shader
     pub graph_material: Option<Handle<MultiLineGraphMaterial>>,
+    /// Handles to all graph label entities
     pub graph_labels: Vec<GraphLabelHandle>,
+    /// Width allocated for graph labels in pixels
     pub graph_label_width: f32,
+    /// Entity for the bars container
     pub bars_root: Option<Entity>,
+    /// Entities for individual bar graphics
     pub bar_entities: Vec<Entity>,
+    /// Material handles for bar shaders
     pub bar_materials: Vec<Handle<BarMaterial>>,
+    /// Entities for bar label text
     pub bar_labels: Vec<Entity>,
 }
 
-/// Sampled performance values
+/// Resource storing the most recent sampled values for all performance metrics.
+///
+/// This acts as a cache of current metric values, updated each frame by the
+/// metric sampling system and consumed by the HUD rendering systems.
 #[derive(Resource, Default)]
 pub struct SampledValues {
+    /// Map from metric ID to its current value
     values: HashMap<String, f32>,
 }
 
 impl SampledValues {
-    /// 设置性能指标值 / Set performance metric value
+    /// Set the current value for a performance metric.
+    ///
+    /// # Arguments
+    /// * `id` - The metric identifier
+    /// * `value` - The new metric value
     pub fn set(&mut self, id: &str, value: f32) {
         if let Some(existing) = self.values.get_mut(id) {
             *existing = value;
@@ -272,42 +450,145 @@ impl SampledValues {
         }
     }
 
-    /// 获取指标的当前值 / Fetch current value of a metric
+    /// Get the current value for a performance metric.
+    ///
+    /// # Arguments
+    /// * `id` - The metric identifier
+    ///
+    /// # Returns
+    /// The current value if the metric exists, None otherwise
     pub fn get(&self, id: &str) -> Option<f32> {
         self.values.get(id).copied()
     }
 }
 
-/// 性能度量采样上下文 / Metric sampling context
+/// Resource storing historical values for graph curve rendering.
+///
+/// Maintains a sliding window of historical values for each curve, used by
+/// the graph shader to render time-series data. Values are stored in a
+/// circular buffer format for efficient memory usage.
+#[derive(Resource)]
+pub struct HistoryBuffers {
+    /// 2D array: [curve_index][sample_index] containing historical values
+    /// Each curve can store up to MAX_SAMPLES historical data points
+    pub values: [[f32; MAX_SAMPLES]; MAX_CURVES],
+    /// Number of valid samples currently stored (0 to MAX_SAMPLES)
+    pub length: u32,
+}
+
+impl Default for HistoryBuffers {
+    fn default() -> Self {
+        Self {
+            values: [[0.0; MAX_SAMPLES]; MAX_CURVES],
+            length: 0,
+        }
+    }
+}
+
+/// Resource storing the current smoothed Y-axis scale for graphs.
+///
+/// When autoscaling is enabled, this maintains smoothed min/max values
+/// to reduce visual jitter from rapid scale changes. The values are
+/// interpolated over time to provide stable graph scaling.
+#[derive(Resource, Default, Clone, Copy)]
+pub struct GraphScaleState {
+    /// Current smoothed minimum Y-axis value
+    pub min_y: f32,
+    /// Current smoothed maximum Y-axis value
+    pub max_y: f32,
+}
+
+// ============================================================================
+// METRIC PROVIDER SYSTEM
+// ============================================================================
+//
+// This section implements the extensible metric provider system that allows
+// the HUD to display both built-in and custom performance metrics. The system
+// uses a trait-based approach for maximum flexibility and performance.
+
+/// Context passed to metric providers during sampling.
+///
+/// Contains references to Bevy's diagnostic systems and other resources
+/// that providers might need to calculate their metric values.
 #[derive(Clone, Copy)]
 pub struct MetricSampleContext<'a> {
+    /// Reference to Bevy's diagnostics store for built-in metrics
     pub diagnostics: Option<&'a DiagnosticsStore>,
 }
 
-/// 性能度量提供者约定 / Trait for performance metric providers
+/// Trait for implementing custom performance metric providers.
+///
+/// This trait allows you to create custom metrics that can be displayed
+/// in the performance HUD alongside built-in metrics like FPS and frame time.
+///
+/// # Example
+/// ```rust
+/// use bevy_perf_hud::{PerfMetricProvider, MetricSampleContext};
+///
+/// struct CustomMetricProvider {
+///     counter: f32,
+/// }
+///
+/// impl PerfMetricProvider for CustomMetricProvider {
+///     fn metric_id(&self) -> &str {
+///         "custom_metric"
+///     }
+///
+///     fn sample(&mut self, _ctx: MetricSampleContext) -> Option<f32> {
+///         self.counter += 1.0;
+///         Some(self.counter)
+///     }
+/// }
+/// ```
 pub trait PerfMetricProvider: Send + Sync + 'static {
+    /// Returns the unique identifier for this metric.
+    /// Must match the ID used in metric definitions.
     fn metric_id(&self) -> &str;
+
+    /// Sample the current value of this metric.
+    ///
+    /// # Arguments
+    /// * `ctx` - Context containing diagnostic data and other resources
+    ///
+    /// # Returns
+    /// The current metric value, or None if unavailable
     fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32>;
 }
 
-/// 性能度量提供者集合 / Registry for metric providers
+/// Resource managing the registry of all metric providers.
+///
+/// This resource maintains a collection of all metric providers (both built-in
+/// and custom) and handles the sampling process during each frame update.
 #[derive(Resource, Default)]
 pub struct MetricProviders {
+    /// Collection of all registered metric providers
     providers: Vec<Box<dyn PerfMetricProvider>>,
 }
 
 impl MetricProviders {
-    /// 添加一个新的度量提供者 / Register a new provider
+    /// Register a new metric provider.
+    ///
+    /// # Arguments
+    /// * `provider` - The provider implementation to register
     pub fn add_provider<P: PerfMetricProvider>(&mut self, provider: P) {
         self.providers.push(Box::new(provider));
     }
 
-    /// 检查是否已存在指定键值 / Detect if a provider for the key exists
+    /// Check if a provider with the given metric ID is already registered.
+    ///
+    /// # Arguments
+    /// * `id` - The metric ID to check for
+    ///
+    /// # Returns
+    /// true if a provider for this metric exists, false otherwise
     pub fn contains(&self, id: &str) -> bool {
         self.providers.iter().any(|p| p.metric_id() == id)
     }
 
-    /// 确保内置度量可用 / Ensure built-in metrics are registered
+    /// Register all built-in metric providers if they haven't been added yet.
+    ///
+    /// This is called automatically by the plugin to ensure standard metrics
+    /// (FPS, frame time, entity count, system resources) are available.
     pub fn ensure_default_entries(&mut self) {
         self.ensure_provider(FpsMetricProvider::default());
         self.ensure_provider(FrameTimeMetricProvider::default());
@@ -318,7 +599,9 @@ impl MetricProviders {
         self.ensure_provider(ProcessMemUsageMetricProvider::default());
     }
 
-    /// 迭代所有提供者 / Iterate through all providers
+    /// Get a mutable iterator over all registered providers.
+    ///
+    /// Used internally by the sampling system to update metric values.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut dyn PerfMetricProvider> {
         self.providers.iter_mut().map(|p| p.as_mut())
     }
@@ -331,8 +614,28 @@ impl MetricProviders {
     }
 }
 
-/// App 扩展方法 / App extension methods
+/// Extension trait for [`App`] to easily register custom metric providers.
+///
+/// This trait provides a convenient way to add custom metric providers
+/// to your Bevy application without needing to manually access resources.
+///
+/// # Example
+/// ```rust
+/// use bevy::prelude::*;
+/// use bevy_perf_hud::PerfHudAppExt;
+///
+/// App::new()
+///     .add_perf_metric_provider(MyCustomProvider::default())
+///     .run();
+/// ```
 pub trait PerfHudAppExt {
+    /// Add a custom metric provider to the application.
+    ///
+    /// # Arguments
+    /// * `provider` - The metric provider to register
+    ///
+    /// # Returns
+    /// The app instance for method chaining
     fn add_perf_metric_provider<P: PerfMetricProvider>(&mut self, provider: P) -> &mut Self;
 }
 
@@ -346,7 +649,10 @@ impl PerfHudAppExt for App {
     }
 }
 
-/// FPS 提供者 / FPS metric provider
+/// Built-in metric provider for frames per second (FPS).
+///
+/// Provides the current FPS value calculated by Bevy's frame time diagnostics.
+/// The value is floored to the nearest integer for display purposes.
 #[derive(Default)]
 pub struct FpsMetricProvider;
 
@@ -364,7 +670,10 @@ impl PerfMetricProvider for FpsMetricProvider {
     }
 }
 
-/// 帧时间提供者 / Frame time metric provider
+/// Built-in metric provider for frame time in milliseconds.
+///
+/// Provides the smoothed frame time duration from Bevy's diagnostics,
+/// converted to milliseconds and floored to the nearest integer.
 #[derive(Default)]
 pub struct FrameTimeMetricProvider;
 
@@ -382,7 +691,10 @@ impl PerfMetricProvider for FrameTimeMetricProvider {
     }
 }
 
-/// 实体数量提供者 / Entity count metric provider
+/// Built-in metric provider for the total number of entities.
+///
+/// Provides the current entity count from Bevy's entity diagnostics.
+/// Useful for monitoring memory usage and performance impact of entities.
 #[derive(Default)]
 pub struct EntityCountMetricProvider;
 
@@ -400,12 +712,10 @@ impl PerfMetricProvider for EntityCountMetricProvider {
     }
 }
 
-const SYSTEM_CPU_USAGE_ID: &str = "system/cpu_usage";
-const SYSTEM_MEM_USAGE_ID: &str = "system/mem_usage";
-const PROCESS_CPU_USAGE_ID: &str = "process/cpu_usage";
-const PROCESS_MEM_USAGE_ID: &str = "process/mem_usage";
-
-/// 系统 CPU 使用率提供者 / System CPU usage metric provider
+/// Built-in metric provider for system-wide CPU usage percentage.
+///
+/// Provides the overall CPU usage across all cores and processes,
+/// as reported by Bevy's system information diagnostics.
 #[derive(Default)]
 pub struct SystemCpuUsageMetricProvider;
 
@@ -423,7 +733,10 @@ impl PerfMetricProvider for SystemCpuUsageMetricProvider {
     }
 }
 
-/// 系统内存使用率提供者 / System memory usage metric provider
+/// Built-in metric provider for system-wide memory usage percentage.
+///
+/// Provides the overall memory usage as a percentage of total system RAM,
+/// as reported by Bevy's system information diagnostics.
 #[derive(Default)]
 pub struct SystemMemUsageMetricProvider;
 
@@ -441,7 +754,10 @@ impl PerfMetricProvider for SystemMemUsageMetricProvider {
     }
 }
 
-/// 进程 CPU 使用率提供者 / Process CPU usage metric provider
+/// Built-in metric provider for process-specific CPU usage percentage.
+///
+/// Provides the CPU usage of the current Bevy application process,
+/// as reported by Bevy's system information diagnostics.
 #[derive(Default)]
 pub struct ProcessCpuUsageMetricProvider;
 
@@ -459,7 +775,10 @@ impl PerfMetricProvider for ProcessCpuUsageMetricProvider {
     }
 }
 
-/// 进程内存使用量提供者 / Process memory usage metric provider
+/// Built-in metric provider for process-specific memory usage in bytes.
+///
+/// Provides the memory usage of the current Bevy application process,
+/// as reported by Bevy's system information diagnostics.
 #[derive(Default)]
 pub struct ProcessMemUsageMetricProvider;
 
@@ -477,32 +796,13 @@ impl PerfMetricProvider for ProcessMemUsageMetricProvider {
     }
 }
 
-// History sample buffers
-#[derive(Resource)]
-pub struct HistoryBuffers {
-    pub values: [[f32; MAX_SAMPLES]; MAX_CURVES],
-    pub length: u32, // Valid length (<= MAX_SAMPLES)
-}
-
-impl Default for HistoryBuffers {
-    fn default() -> Self {
-        Self {
-            values: [[0.0; MAX_SAMPLES]; MAX_CURVES],
-            length: 0,
-        }
-    }
-}
-
-const MAX_SAMPLES: usize = 256;
-const MAX_CURVES: usize = 6;
-const SAMPLES_VEC4: usize = MAX_SAMPLES / 4;
-
-// Graph scale state (smooth min/max to reduce autoscale jitter)
-#[derive(Resource, Default, Clone, Copy)]
-pub struct GraphScaleState {
-    pub min_y: f32,
-    pub max_y: f32,
-}
+// ============================================================================
+// SHADER MODULE
+// ============================================================================
+//
+// This module contains the custom UI materials and shader parameters for
+// rendering performance graphs and bars. The shaders are optimized for
+// real-time display of performance data with minimal CPU overhead.
 
 mod shader_params {
     #![allow(dead_code)]
@@ -592,6 +892,25 @@ mod shader_params {
 
 use shader_params::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams};
 
+// ============================================================================
+// SYSTEM FUNCTIONS
+// ============================================================================
+//
+// This section contains the core Bevy systems that manage the HUD lifecycle:
+// - setup_hud: Creates all UI entities and materials during startup
+// - sample_diagnostics: Updates metric values each frame
+// - update_graph_and_bars: Renders current data to the HUD display
+
+/// Startup system that creates all HUD UI entities and materials.
+///
+/// This system runs once during application startup and creates:
+/// - UI camera for HUD rendering
+/// - Root UI container positioned according to settings
+/// - Graph entities with custom materials and labels
+/// - Bar entities with materials and labels
+/// - HudHandles resource containing all entity references
+///
+/// The system only runs if PerfHudSettings is present and enabled.
 fn setup_hud(
     mut commands: Commands,
     settings: Option<Res<PerfHudSettings>>,
@@ -850,6 +1169,14 @@ fn setup_hud(
     });
 }
 
+/// System that samples all registered metric providers and updates current values.
+///
+/// This system runs every frame and:
+/// - Calls the sample() method on all registered metric providers
+/// - Updates the SampledValues resource with fresh metric data
+/// - Provides the foundation for graph and bar rendering
+///
+/// The system only runs if PerfHudSettings is present and enabled.
 fn sample_diagnostics(
     diagnostics: Option<Res<DiagnosticsStore>>,
     settings: Option<Res<PerfHudSettings>>,
@@ -874,6 +1201,23 @@ fn sample_diagnostics(
     }
 }
 
+/// System that updates graph and bar displays with current performance data.
+///
+/// This system runs every frame after sample_diagnostics and handles:
+/// - Processing raw metric values (smoothing, quantization)
+/// - Managing historical data buffers for graph curves
+/// - Calculating dynamic Y-axis scaling for graphs
+/// - Updating shader material parameters for rendering
+/// - Refreshing label text and colors
+/// - Normalizing bar values for display
+///
+/// The system implements sophisticated features like:
+/// - Exponential smoothing to reduce noise in metric values
+/// - Autoscaling with smoothed transitions to prevent jitter
+/// - Quantization for cleaner value display
+/// - Efficient circular buffer management for historical data
+///
+/// The system only runs if both PerfHudSettings and HudHandles are present.
 fn update_graph_and_bars(
     settings: Option<Res<PerfHudSettings>>,
     handles: Option<Res<HudHandles>>,
@@ -898,73 +1242,86 @@ fn update_graph_and_bars(
 
     let curve_count = s.graph.curves.len().min(MAX_CURVES);
 
-    // Sample mapping -> exponential smoothing -> quantization
+    // Process raw metric values through smoothing and quantization pipeline
     let mut filtered_values = [0.0_f32; MAX_CURVES];
     for (i, cfg) in s.graph.curves.iter().take(curve_count).enumerate() {
         let raw = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
+
+        // Step 1: Apply exponential smoothing to reduce noise
+        // Formula: new_value = prev_value + (raw_value - prev_value) * smoothing_factor
         let smoothing = cfg
             .smoothing
             .unwrap_or(s.graph.curve_defaults.smoothing)
             .clamp(0.0, 1.0);
-        // Use the last value as prev (read before shifting)
+
+        // Get the most recent value from history as the previous value
         let prev = if history.length == 0 {
-            raw
+            raw // No history yet, use raw value
         } else if (history.length as usize) < MAX_SAMPLES {
-            history.values[i][history.length as usize - 1]
+            history.values[i][history.length as usize - 1] // Buffer not full
         } else {
-            history.values[i][MAX_SAMPLES - 1]
+            history.values[i][MAX_SAMPLES - 1] // Buffer is full, use last element
         };
+
         let smoothed = prev + (raw - prev) * smoothing;
-        // Quantize: round to nearest multiple; disabled when step <= 0
+
+        // Step 2: Apply quantization to create cleaner stepped values
+        // Rounds to the nearest multiple of quantize_step
         let step = cfg
             .quantize_step
             .unwrap_or(s.graph.curve_defaults.quantize_step);
         filtered_values[i] = if step > 0.0 {
             (smoothed / step).round() * step
         } else {
-            smoothed
+            smoothed // No quantization
         };
     }
 
-    // Push into history (shift-right/append)
+    // Update history buffers with new values using circular buffer approach
     if (history.length as usize) < MAX_SAMPLES {
-        // Fill the next index directly
+        // Buffer not yet full: append new values at the end
         let idx = history.length as usize;
         for i in 0..MAX_CURVES {
             let value = if i < curve_count {
                 filtered_values[i]
             } else {
-                0.0
+                0.0 // Pad unused curves with zeros
             };
             history.values[i][idx] = value;
         }
         history.length += 1;
     } else {
-        // Sliding window: shift left by one
+        // Buffer is full: implement sliding window by shifting all values left
+        // This maintains the most recent MAX_SAMPLES values for graphing
         for i in 0..MAX_CURVES {
-            history.values[i].copy_within(1..MAX_SAMPLES, 0);
+            history.values[i].copy_within(1..MAX_SAMPLES, 0); // Shift left
             let value = if i < curve_count {
                 filtered_values[i]
             } else {
-                0.0
+                0.0 // Pad unused curves with zeros
             };
-            history.values[i][MAX_SAMPLES - 1] = value;
+            history.values[i][MAX_SAMPLES - 1] = value; // Insert new value at end
         }
     }
 
-    // Compute target Y scale (autoscale or fixed), then smooth/quantize
+    // Calculate target Y-axis range: either fixed from config or auto-scaled from data
     let mut target_min = s.graph.min_y;
     let mut target_max = s.graph.max_y;
+
+    // Check if any curves want autoscaling and we have historical data
     if s.graph
         .curves
         .iter()
         .any(|c| c.autoscale.unwrap_or(s.graph.curve_defaults.autoscale))
         && history.length > 0
     {
+        // Scan all historical data to find the actual min/max range
         let len = history.length as usize;
         let mut mn = f32::INFINITY;
         let mut mx = f32::NEG_INFINITY;
+
         for (i, cfg) in s.graph.curves.iter().take(curve_count).enumerate() {
+            // Only include curves that want autoscaling in the calculation
             if cfg.autoscale.unwrap_or(s.graph.curve_defaults.autoscale) {
                 for k in 0..len {
                     mn = mn.min(history.values[i][k]);
@@ -972,6 +1329,8 @@ fn update_graph_and_bars(
                 }
             }
         }
+
+        // Use the calculated range if it's valid
         if mn.is_finite() && mx.is_finite() {
             target_min = mn;
             target_max = mx;
@@ -1148,7 +1507,7 @@ fn update_graph_and_bars(
                 mat.params.bg_a = bg.w;
             }
 
-            // 在柱条内部刷新文字与颜色 / Update bar label text inside the bar
+            // Update bar labels with current values and formatting
             if let Some(&label_entity) = h.bar_labels.get(i) {
                 let definition = &cfg.metric;
                 let base_label = definition
