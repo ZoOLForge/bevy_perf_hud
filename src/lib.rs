@@ -149,14 +149,14 @@ impl Default for PerfHudSettings {
             label: Some("FT:".into()),
             unit: Some("ms".into()),
             precision: 1,
-            color: Color::srgb(0.0, 1.0, 0.0),
+            color: Color::srgb(0.8, 0.8, 0.8), // 灰色
         };
         let fps_metric = MetricDefinition {
             id: "fps".into(),
             label: Some("FPS:".into()),
             unit: Some("fps".into()),
             precision: 0,
-            color: Color::srgb(0.9, 0.0, 0.0),
+            color: Color::srgb(1.0, 1.0, 1.0), // 白色
         };
         let entity_metric = MetricDefinition {
             id: "entity_count".into(),
@@ -185,7 +185,7 @@ impl Default for PerfHudSettings {
             origin: Vec2::new(960.0, 16.0),
             graph: GraphSettings {
                 enabled: true,
-                size: Vec2::new(200.0, 80.0),
+                size: Vec2::new(300.0, 80.0),
                 label_width: 60.0,
                 min_y: 0.0,
                 max_y: 30.0,
