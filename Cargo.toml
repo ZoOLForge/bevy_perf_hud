@@ -1,15 +1,16 @@
 [package]
 name = "bevy_perf_hud"
-description = "A simple HTTP client for Bevy"
+description = "Configurable performance HUD overlay plugin for Bevy apps"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 readme = "README.md"
 homepage = "https://crates.io/crates/bevy_perf_hud"
 documentation = "https://docs.rs/bevy_perf_hud"
 repository = "https://github.com/ZoOLForge/bevy_perf_hud"
 authors = ["FoxZoOL <zhooul@gmail.com>"]
 license = "MIT OR Apache-2.0"
-keywords = ["bevy", "metric", "plugin", "wasm"]
+keywords = ["bevy", "hud", "metrics", "performance", "overlay"]
+categories = ["game-development", "visualization", "development-tools::profiling"]
 exclude = ["/examples/*", "/tests/*", "assets/*"]
 
 

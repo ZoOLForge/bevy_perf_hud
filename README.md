@@ -1,0 +1,125 @@
+# bevy_perf_hud
+
+A configurable performance heads-up display (HUD) plugin for Bevy applications. Visualize frame pacing, entity counts, and resource usage in real time, with extensibility for your own metrics.
+
+## Features
+
+- Flexible HUD layout with multi-curve graphs and resource bars.
+- Built-in providers for FPS, frame time, entity count, and system/process CPU & memory usage.
+- Fine-grained control over smoothing, quantization, autoscaling, and appearance.
+- Extensible `PerfMetricProvider` trait for custom metrics that appear alongside built-ins.
+- Desktop and WebAssembly support with tuned profiles for dev, release, web-release, and CI.
+
+## Installation
+
+Add the crate to your `Cargo.toml`:
+
+```toml
+[dependencies]
+bevy = { version = "0.16", default-features = false, features = ["bevy_winit", "bevy_ui", "bevy_render"] }
+bevy_perf_hud = "0.1"
+```
+
+> Tip: If you rely on `DefaultPlugins`, ensure `bevy_diagnostic` and `bevy_ui` features are enabled so the HUD can gather data and render correctly.
+
+## Quick Start
+
+```rust
+use bevy::prelude::*;
+use bevy_perf_hud::BevyPerfHudPlugin;
+
+fn main() {
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_plugins(BevyPerfHudPlugin)
+        .run();
+}
+```
+
+By default the HUD appears near the top-right corner. To reposition or customize the layout, insert a `PerfHudSettings` resource before adding the plugin:
+
+```rust
+use bevy::prelude::*;
+use bevy_perf_hud::{BevyPerfHudPlugin, PerfHudSettings};
+
+fn main() {
+    App::new()
+        .insert_resource(PerfHudSettings {
+            origin: Vec2::new(32.0, 32.0),
+            ..default()
+        })
+        .add_plugins(DefaultPlugins)
+        .add_plugins(BevyPerfHudPlugin)
+        .run();
+}
+```
+
+## Built-in Metrics
+
+| Metric ID | Description |
+| --- | --- |
+| `fps` | Frames per second (floored to an integer). |
+| `frame_time_ms` | Smoothed frame time in milliseconds. |
+| `entity_count` | Active entity count in the `World`. |
+| `system/cpu_usage` | Overall system CPU usage percentage. |
+| `system/mem_usage` | Overall system memory usage percentage. |
+| `process/cpu_usage` | CPU usage of the running process. |
+| `process/mem_usage` | Memory footprint of the running process (MiB). |
+
+## Custom Metrics
+
+Implement the `PerfMetricProvider` trait and register it with the `PerfHudAppExt` helper:
+
+```rust
+use bevy::prelude::*;
+use bevy_perf_hud::{PerfHudAppExt, PerfMetricProvider, MetricSampleContext};
+
+#[derive(Default)]
+struct NetworkLagProvider(f32);
+
+impl PerfMetricProvider for NetworkLagProvider {
+    fn metric_id(&self) -> &str { "net/lag_ms" }
+
+    fn sample(&mut self, _ctx: MetricSampleContext) -> Option<f32> {
+        self.0 = (self.0 + 1.0) % 120.0;
+        Some(self.0)
+    }
+}
+
+fn main() {
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_plugins(bevy_perf_hud::BevyPerfHudPlugin)
+        .add_perf_metric_provider(NetworkLagProvider::default())
+        .run();
+}
+```
+
+## Examples
+
+The repository ships with two runnable examples:
+
+- `examples/simple.rs`: 3D scene with keyboard shortcuts (Space spawns cubes, F1 toggles HUD modes).
+- `examples/custom_metric.rs`: Demonstrates registering an additional metric provider.
+
+Run them with:
+
+```bash
+cargo run --example simple
+cargo run --example custom_metric
+```
+
+## Build Profiles
+
+`Cargo.toml` includes tuned `dev`, `release`, `web-release`, and `ci` profiles. Adjust them as needed to balance iteration speed and runtime performance across desktop and Web targets.
+
+## License
+
+Dual-licensed under either the MIT License or Apache License 2.0. See the `LICENSE` files (if present) or `Cargo.toml` for details.
+
+## Acknowledgements
+
+- [Bevy Engine](https://bevyengine.org/) for providing the ECS/game-engine foundation.
+- `bevy_diagnostic` and `SystemInformationDiagnosticsPlugin` for the metrics that power the HUD.
+
+Looking for the Chinese documentation? See [`README_CN.md`](README_CN.md).
