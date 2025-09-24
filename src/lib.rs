@@ -149,14 +149,14 @@ impl Default for PerfHudSettings {
             label: Some("FT:".into()),
             unit: Some("ms".into()),
             precision: 1,
-            color: Color::srgb(0.8, 0.8, 0.8), // 灰色
+            color: Color::srgb(0.4, 0.4, 0.4),
         };
         let fps_metric = MetricDefinition {
             id: "fps".into(),
             label: Some("FPS:".into()),
             unit: Some("fps".into()),
             precision: 0,
-            color: Color::srgb(1.0, 1.0, 1.0), // 白色
+            color: Color::srgb(1.0, 1.0, 1.0),
         };
         let entity_metric = MetricDefinition {
             id: "entity_count".into(),
