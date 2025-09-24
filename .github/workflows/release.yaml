@@ -54,13 +54,13 @@ jobs:
             };
 
             const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-            const ciWorkflowNames = ['CI'];
             const maxAttempts = 40;
             const delayMs = 15000;
             const targetSha = await ensureCommitSha();
 
-            core.info(`Waiting for CI workflow to succeed on ${targetSha} (tag ${tagName}).`);
+            core.info(`Checking CI status for commit ${targetSha} (tag ${tagName}).`);
 
+            // First, check if CI has run for this commit
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
               const { data } = await github.rest.checks.listForRef({
                 owner,
@@ -69,12 +69,30 @@ jobs:
                 per_page: 100,
               });
 
-              const ciRuns = data.check_runs.filter(run =>
-                ciWorkflowNames.some(name => run.name?.startsWith(`${name} /`))
-              );
+              // Look for CI workflow jobs (Format, Docs, Clippy lints, etc.)
+              const ciRuns = data.check_runs.filter(run => {
+                // CI jobs have names like "Format", "Docs", "Clippy lints", "Tests", etc.
+                const ciJobNames = ['Format', 'Docs', 'Clippy lints', 'Bevy lints', 'Tests', 'Check web'];
+                return ciJobNames.includes(run.name);
+              });
 
               if (ciRuns.length === 0) {
-                core.info(`Attempt ${attempt}: CI check runs not found yet, waiting...`);
+                core.info(`Attempt ${attempt}: No CI checks found on commit ${targetSha}. This may be because the tag was created on an old commit.`);
+
+                // Try to find CI runs on main branch for this commit
+                const { data: commits } = await github.rest.repos.listCommits({
+                  owner,
+                  repo,
+                  sha: 'main',
+                  per_page: 100
+                });
+
+                const commitOnMain = commits.find(c => c.sha === targetSha);
+                if (!commitOnMain) {
+                  core.setFailed(`Commit ${targetSha} is not on main branch. Only main branch commits can be released.`);
+                  return;
+                }
+
                 await wait(delayMs);
                 continue;
               }
