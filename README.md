@@ -109,10 +109,6 @@ cargo run --example simple
 cargo run --example custom_metric
 ```
 
-## Build Profiles
-
-`Cargo.toml` includes tuned `dev`, `release`, `web-release`, and `ci` profiles. Adjust them as needed to balance iteration speed and runtime performance across desktop and Web targets.
-
 ## License
 
 Dual-licensed under either the MIT License or Apache License 2.0. See the `LICENSE` files (if present) or `Cargo.toml` for details.

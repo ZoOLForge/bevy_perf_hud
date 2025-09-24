@@ -109,11 +109,6 @@ cargo run --example simple
 cargo run --example custom_metric
 ```
 
-## 构建配置 Build Profiles
-
-仓库提供了 `dev`、`release`、`web-release` 与 `ci` Profile，可根据 README 中的建议在本地与 CI 环境获得更佳体验。默认启用了适度优化与
-Web 构建调优，若需调整请修改 `Cargo.toml` 中的 `[profile.*]` 设置。
-
 ## 许可证 License
 
 本项目采用双许可协议：MIT 或 Apache-2.0。你可以在 `LICENSE-MIT` 与 `LICENSE-APACHE`（如果存在）中找到完整文本，亦可在
