@@ -78,11 +78,11 @@ impl Plugin for BevyPerfHudPlugin {
         };
 
         if !app.is_plugin_added::<EntityCountDiagnosticsPlugin>() {
-            app.add_plugins(EntityCountDiagnosticsPlugin::default());
+            app.add_plugins(EntityCountDiagnosticsPlugin);
         };
 
         if !app.is_plugin_added::<SystemInformationDiagnosticsPlugin>() {
-            app.add_plugins(SystemInformationDiagnosticsPlugin::default());
+            app.add_plugins(SystemInformationDiagnosticsPlugin);
         };
 
         // Register custom UI materials for graph and bar rendering
@@ -469,7 +469,7 @@ impl SampledValues {
 /// circular buffer format for efficient memory usage.
 #[derive(Resource)]
 pub struct HistoryBuffers {
-    /// 2D array: [curve_index][sample_index] containing historical values
+    /// 2D array: \[curve_index\]\[sample_index\] containing historical values
     /// Each curve can store up to MAX_SAMPLES historical data points
     pub values: [[f32; MAX_SAMPLES]; MAX_CURVES],
     /// Number of valid samples currently stored (0 to MAX_SAMPLES)
@@ -590,13 +590,13 @@ impl MetricProviders {
     /// This is called automatically by the plugin to ensure standard metrics
     /// (FPS, frame time, entity count, system resources) are available.
     pub fn ensure_default_entries(&mut self) {
-        self.ensure_provider(FpsMetricProvider::default());
-        self.ensure_provider(FrameTimeMetricProvider::default());
-        self.ensure_provider(EntityCountMetricProvider::default());
-        self.ensure_provider(SystemCpuUsageMetricProvider::default());
-        self.ensure_provider(SystemMemUsageMetricProvider::default());
-        self.ensure_provider(ProcessCpuUsageMetricProvider::default());
-        self.ensure_provider(ProcessMemUsageMetricProvider::default());
+        self.ensure_provider(FpsMetricProvider);
+        self.ensure_provider(FrameTimeMetricProvider);
+        self.ensure_provider(EntityCountMetricProvider);
+        self.ensure_provider(SystemCpuUsageMetricProvider);
+        self.ensure_provider(SystemMemUsageMetricProvider);
+        self.ensure_provider(ProcessCpuUsageMetricProvider);
+        self.ensure_provider(ProcessMemUsageMetricProvider);
     }
 
     /// Get a mutable iterator over all registered providers.
@@ -949,26 +949,29 @@ fn setup_hud(
     let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
     if s.graph.enabled {
         let mut graph_params = MultiLineGraphParams::default();
-        graph_params.length = 0;
-        graph_params.min_y = s.graph.min_y;
-        graph_params.max_y = s.graph.max_y;
-        graph_params.thickness = s.graph.thickness;
-        graph_params.bg_color = s.graph.bg_color.to_linear().to_vec4();
-        graph_params.border_color = s.graph.border.color.to_linear().to_vec4();
-        graph_params.border_thickness = s.graph.border.thickness; // pixels
-        graph_params.border_thickness_uv_x =
-            (s.graph.border.thickness / s.graph.size.x).max(0.0001);
-        graph_params.border_thickness_uv_y =
-            (s.graph.border.thickness / s.graph.size.y).max(0.0001);
-        graph_params.border_left = if s.graph.border.left { 1 } else { 0 };
-        graph_params.border_bottom = if s.graph.border.bottom { 1 } else { 0 };
-        graph_params.border_right = if s.graph.border.right { 1 } else { 0 };
-        graph_params.border_top = if s.graph.border.top { 1 } else { 0 };
-        graph_params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
-        // Write curve colors
-        for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
-            let v = c.metric.color.to_linear().to_vec4();
-            graph_params.colors[i] = v;
+        #[allow(clippy::field_reassign_with_default)]
+        {
+            graph_params.length = 0;
+            graph_params.min_y = s.graph.min_y;
+            graph_params.max_y = s.graph.max_y;
+            graph_params.thickness = s.graph.thickness;
+            graph_params.bg_color = s.graph.bg_color.to_linear().to_vec4();
+            graph_params.border_color = s.graph.border.color.to_linear().to_vec4();
+            graph_params.border_thickness = s.graph.border.thickness; // pixels
+            graph_params.border_thickness_uv_x =
+                (s.graph.border.thickness / s.graph.size.x).max(0.0001);
+            graph_params.border_thickness_uv_y =
+                (s.graph.border.thickness / s.graph.size.y).max(0.0001);
+            graph_params.border_left = if s.graph.border.left { 1 } else { 0 };
+            graph_params.border_bottom = if s.graph.border.bottom { 1 } else { 0 };
+            graph_params.border_right = if s.graph.border.right { 1 } else { 0 };
+            graph_params.border_top = if s.graph.border.top { 1 } else { 0 };
+            graph_params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
+            // Write curve colors
+            for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
+                let v = c.metric.color.to_linear().to_vec4();
+                graph_params.colors[i] = v;
+            }
         }
         // Row container: left labels + right graph
         let label_width = s.graph.label_width.max(40.0);
@@ -1037,7 +1040,7 @@ fn setup_hud(
         graph_handle_opt = Some(gh);
     }
 
-    // Bars container placed below the graph / 将柱状图容器放在图表下方
+    // Bars container placed below the graph
     let mut bars_root_opt: Option<Entity> = None;
     let mut bar_entities = Vec::new();
     let mut bar_materials = Vec::new();
@@ -1218,6 +1221,7 @@ fn sample_diagnostics(
 /// - Efficient circular buffer management for historical data
 ///
 /// The system only runs if both PerfHudSettings and HudHandles are present.
+#[allow(clippy::too_many_arguments)]
 fn update_graph_and_bars(
     settings: Option<Res<PerfHudSettings>>,
     handles: Option<Res<HudHandles>>,
@@ -1281,26 +1285,25 @@ fn update_graph_and_bars(
     if (history.length as usize) < MAX_SAMPLES {
         // Buffer not yet full: append new values at the end
         let idx = history.length as usize;
-        for i in 0..MAX_CURVES {
-            let value = if i < curve_count {
-                filtered_values[i]
-            } else {
-                0.0 // Pad unused curves with zeros
-            };
-            history.values[i][idx] = value;
+        for (i, value) in filtered_values.iter().enumerate().take(MAX_CURVES) {
+            history.values[i][idx] = *value;
+        }
+        // Pad unused curves with zeros
+        for i in curve_count..MAX_CURVES {
+            history.values[i][idx] = 0.0;
         }
         history.length += 1;
     } else {
         // Buffer is full: implement sliding window by shifting all values left
         // This maintains the most recent MAX_SAMPLES values for graphing
-        for i in 0..MAX_CURVES {
+        for (i, value) in filtered_values.iter().enumerate().take(MAX_CURVES) {
             history.values[i].copy_within(1..MAX_SAMPLES, 0); // Shift left
-            let value = if i < curve_count {
-                filtered_values[i]
-            } else {
-                0.0 // Pad unused curves with zeros
-            };
-            history.values[i][MAX_SAMPLES - 1] = value; // Insert new value at end
+            history.values[i][MAX_SAMPLES - 1] = *value; // Insert new value at end
+        }
+        // Handle unused curves with zeros
+        for i in curve_count..MAX_CURVES {
+            history.values[i].copy_within(1..MAX_SAMPLES, 0); // Shift left
+            history.values[i][MAX_SAMPLES - 1] = 0.0; // Insert zero at end
         }
     }
 
@@ -1444,12 +1447,12 @@ fn update_graph_and_bars(
                 }
                 // Write values (pack into vec4)
                 let len = MAX_SAMPLES.min(history.length as usize);
-                let packed_len = (len + 3) / 4; // round up
+                let packed_len = len.div_ceil(4); // round up
                 for i in 0..MAX_CURVES {
                     for j in 0..SAMPLES_VEC4 {
                         let base = j * 4;
-                        let x0 = if base + 0 < len {
-                            history.values[i][base + 0]
+                        let x0 = if base < len {
+                            history.values[i][base]
                         } else {
                             0.0
                         };

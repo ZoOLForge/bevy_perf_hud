@@ -109,7 +109,7 @@ jobs:
           components: clippy
 
       - name: Install bevy_lint
-        run: cargo install bevy_lint --locked
+        run: cargo install --git https://github.com/TheBevyFlock/bevy_cli --tag cli-v0.1.0-alpha.2 --locked bevy_cli
 
       - name: Restore Rust cache
         id: cache

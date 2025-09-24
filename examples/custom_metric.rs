@@ -6,7 +6,7 @@ use bevy_perf_hud::{
 
 const CUSTOM_METRIC_ID: &str = "custom/network_latency_ms";
 
-/// 模拟网络延迟度量提供者 / Simulated network latency metric provider
+/// Simulated network latency metric provider
 struct NetworkLatencyMetric {
     seed: u64,
     current_ms: f32,
@@ -22,7 +22,7 @@ impl Default for NetworkLatencyMetric {
 }
 
 impl NetworkLatencyMetric {
-    /// 简单 LCG 生成 0-1 随机数 / Lightweight LCG random in [0, 1)
+    /// Lightweight LCG random in [0, 1)
     fn next_noise(&mut self) -> f32 {
         self.seed = self.seed.wrapping_mul(6364136223846793005).wrapping_add(1);
         let bits = (self.seed >> 32) as u32;
@@ -36,24 +36,27 @@ impl PerfMetricProvider for NetworkLatencyMetric {
     }
 
     fn sample(&mut self, _ctx: MetricSampleContext) -> Option<f32> {
-        // 模拟基础延迟与抖动 / Simulate baseline latency plus jitter
-        let noise = (self.next_noise() - 0.5) * 30.0; // ±15ms 波动 / ±15ms jitter
-        let target = 60.0 + noise.max(-45.0); // 约 60ms 基础延迟 / ~60ms base latency
+        // Simulate baseline latency plus jitter
+        let noise = (self.next_noise() - 0.5) * 30.0; // ±15ms jitter
+        let target = 30.0 + noise.max(-45.0); // ~30ms base latency
         self.current_ms = self.current_ms + (target - self.current_ms) * 0.2;
         Some(self.current_ms.max(0.0))
     }
 }
 
 fn main() {
-    // 基于默认 HUD 配置追加网络延迟度量 / Extend default HUD with network latency metric
-    let mut settings = PerfHudSettings::default();
-    settings.origin = Vec2::new(16.0, 16.0);
+    // Extend default HUD with network latency metric
     let latency_metric = MetricDefinition {
         id: CUSTOM_METRIC_ID.into(),
         label: Some("Latency".into()),
         unit: Some("ms".into()),
         precision: 1,
-        color: Color::srgb(0.65, 0.41, 0.96),
+        color: Color::srgb(0.65, 0.11, 0.0),
+    };
+
+    let mut settings = PerfHudSettings {
+        origin: Vec2::new(16.0, 16.0),
+        ..Default::default()
     };
 
     settings.graph.max_y = 160.0;

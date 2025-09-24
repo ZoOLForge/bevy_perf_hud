@@ -89,6 +89,7 @@ fn setup_3d(mut commands: Commands) {
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_cube_on_space(
     keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<CubeState>,
@@ -125,7 +126,7 @@ fn spawn_cube_on_space(
     // Grid parameters
     let n = spawn.batch.max(1) as usize;
     let cols = (n as f32).sqrt().ceil() as usize;
-    let rows = (n + cols - 1) / cols;
+    let rows = n.div_ceil(cols);
     let sx = spawn.spacing;
 
     // Planar jitter: randomly offset center within a fraction of grid width/height to avoid overlap
