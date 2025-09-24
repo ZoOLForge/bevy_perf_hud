@@ -90,12 +90,12 @@ impl Plugin for BevyPerfHudPlugin {
         app.add_plugins(UiMaterialPlugin::<MultiLineGraphMaterial>::default())
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
             // Initialize core resources for HUD state management
-            .init_resource::<SampledValues>()     // Current metric values
-            .init_resource::<MetricProviders>()   // Registry of metric sources
-            .init_resource::<HistoryBuffers>()    // Historical data for graphs
-            .init_resource::<GraphScaleState>()   // Dynamic scaling state
+            .init_resource::<SampledValues>() // Current metric values
+            .init_resource::<MetricProviders>() // Registry of metric sources
+            .init_resource::<HistoryBuffers>() // Historical data for graphs
+            .init_resource::<GraphScaleState>() // Dynamic scaling state
             // Register systems for HUD lifecycle
-            .add_systems(Startup, setup_hud)      // Create HUD entities on startup
+            .add_systems(Startup, setup_hud) // Create HUD entities on startup
             .add_systems(Update, (sample_diagnostics, update_graph_and_bars).chain()); // Update loop
 
         // Register default metric providers (FPS, frame time, entity count, system info)
