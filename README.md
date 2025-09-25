@@ -7,7 +7,7 @@
 [![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/Seldom-SE/seldom_pixel#license)
 [![Discord](https://img.shields.io/discord/1319490473060073532?label=Discord&logo=discord&logoColor=white)](https://discord.gg/jwyXfjUP)
 
-![Sep-24-2025 18-37-55](https://github.com/user-attachments/assets/a70f766d-db96-4f3d-9d20-39dac1f8270f)
+![Sep-24-2025 18-37-55](https://github.com/ZoOLForge/bevy_perf_hud/blob/main/media/Sep-24-2025%2018-37-55.gif)
 
 A configurable performance heads-up display (HUD) plugin for Bevy applications. Visualize frame pacing, entity counts,
 and resource usage in real time, with extensibility for your own metrics.
