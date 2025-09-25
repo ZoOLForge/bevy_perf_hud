@@ -28,7 +28,7 @@ use crate::constants::{MAX_CURVES, SAMPLES_VEC4};
 /// for multiple curves, UI styling, and rendering configuration.
 #[derive(Debug, Clone, ShaderType)]
 pub struct MultiLineGraphParams {
-    /// 2D array storing all graph values [curve_index][vec4_chunk_index]
+    /// 2D array storing all graph values \[curve_index\]\[vec4_chunk_index\]
     /// Each curve's data is packed into Vec4 chunks for efficient GPU access
     pub values: [[Vec4; SAMPLES_VEC4]; MAX_CURVES],
     /// Number of valid data points currently stored in the values array

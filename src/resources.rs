@@ -25,6 +25,8 @@ pub struct GraphLabelHandle {
 /// Used internally by systems to update HUD appearance and content.
 #[derive(Resource)]
 pub struct HudHandles {
+    /// Root entity for the entire HUD UI hierarchy
+    pub root: Option<Entity>,
     /// Entity for the graph row container (contains labels + graph)
     pub graph_row: Option<Entity>,
     /// Entity for the actual graph rendering area
