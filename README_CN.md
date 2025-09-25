@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/discord/1319490473060073532?label=Discord&logo=discord&logoColor=white)](https://discord.gg/jwyXfjUP)
 
 
-![Sep-24-2025 18-37-55](https://github.com/ZoOLForge/bevy_perf_hud/blob/main/media/Sep-24-2025%2018-37-55.gif)
+![Sep-24-2025 18-37-55](https://github.com/ZoOLForge/bevy_perf_hud/raw/main/media/Sep-24-2025%2018-37-55.gif)
 
 高性能监控 HUD 插件，专为 Bevy 应用打造，可在运行时展示帧率、帧时间、系统与进程资源等指标，并提供可扩展的自定义度量体系。
 
