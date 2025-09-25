@@ -73,6 +73,8 @@ fn main() {
         BarConfig {
             metric: latency_metric.clone(),
             show_value: Some(true),
+            min_value: 0.0,
+            max_value: 200.0, // Max 200ms latency
         },
     );
 

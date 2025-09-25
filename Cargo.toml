@@ -11,7 +11,7 @@ authors = ["FoxZoOL <zhooul@gmail.com>"]
 license = "MIT OR Apache-2.0"
 keywords = ["bevy", "hud", "metrics", "performance", "overlay"]
 categories = ["game-development", "visualization", "development-tools::profiling"]
-exclude = ["/examples/*", "/tests/*", "assets/*"]
+exclude = ["/examples/*", "/tests/*", "assets/*", "media/*"]
 
 
 [dependencies]
