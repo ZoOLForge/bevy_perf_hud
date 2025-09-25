@@ -127,13 +127,19 @@ fn main() {
             {
                 fps_curve.smoothing = Some(0.15);
             }
-            if let Some(cpu_bar) = settings
+            // 修改实体数量条使用自动缩放
+            if let Some(entity_bar) = settings
                 .bars
                 .bars
                 .iter_mut()
-                .find(|bar| bar.metric.id == "system/cpu_usage")
+                .find(|bar| bar.metric.id == "entity_count")
             {
-                cpu_bar.max_value = 85.0;
+                entity_bar.scale_mode = bevy_perf_hud::BarScaleMode::Auto {
+                    smoothing: 0.8,     // 平滑范围过渡
+                    min_span: 100.0,    // 最小范围100个实体
+                    margin_frac: 0.2,   // 20%增长余量
+                };
+                entity_bar.show_value = Some(true);
             }
             settings
         })
@@ -142,6 +148,68 @@ fn main() {
         .run();
 }
 ```
+
+### 性能条缩放模式
+
+性能条可以使用不同的缩放模式来动态调整其范围：
+
+#### 固定模式（默认）
+使用静态 `min_value` 和 `max_value` - 传统行为，具有可预测的稳定范围。
+
+```rust
+use bevy_perf_hud::{BarConfig, BarScaleMode, MetricDefinition};
+
+BarConfig {
+    metric: MetricDefinition { /* ... */ },
+    min_value: 0.0,
+    max_value: 100.0,
+    scale_mode: BarScaleMode::Fixed, // 直接使用 min_value/max_value
+    // ...
+}
+```
+
+#### 自动模式
+基于历史数据自动调整范围，具有平滑过渡：
+
+```rust
+BarConfig {
+    metric: MetricDefinition { /* ... */ },
+    min_value: 0.0,   // 无数据时的后备值
+    max_value: 100.0, // 无数据时的后备值
+    scale_mode: BarScaleMode::Auto {
+        smoothing: 0.8,     // 范围变化平滑度（0.0=瞬间，1.0=从不变化）
+        min_span: 10.0,     // 最小范围跨度，防止除零
+        margin_frac: 0.15,  // 数据上下边距分数（0.0-0.5）
+    },
+    min_limit: Some(0.0),    // 硬性最小边界（可选）
+    max_limit: Some(500.0),  // 硬性最大边界（可选）
+    // ...
+}
+```
+
+#### 百分位模式
+使用最近样本的百分位数 - 适合有尖峰的数据，如延迟：
+
+```rust
+BarConfig {
+    metric: MetricDefinition { /* ... */ },
+    min_value: 0.0,   // 样本不足时的后备值
+    max_value: 100.0, // 样本不足时的后备值
+    scale_mode: BarScaleMode::Percentile {
+        lower: 5.0,        // P5百分位数作为最小值（忽略底部5%）
+        upper: 95.0,       // P95百分位数作为最大值（忽略顶部5%）
+        sample_count: 60,  // 要分析的最近样本数量
+    },
+    min_limit: Some(0.0),    // 硬边界防止极端异常值
+    max_limit: Some(1000.0),
+    // ...
+}
+```
+
+**使用场景：**
+- **固定**：CPU/内存百分比、已知限制的FPS
+- **自动**：实体数量、MB单位的内存使用等变化指标
+- **百分位**：网络延迟、帧尖峰、任何有异常值的指标
 
 ## 内置指标
 
@@ -292,16 +360,18 @@ fn update_game_stats(
 
 ## 示例
 
-仓库提供了两个可运行的示例：
+仓库提供了几个可运行的示例：
 
 - `examples/simple.rs`: 带有 3D 场景与键盘快捷键（空格键生成方块，F1 切换 HUD 模式）。
-- `examples/custom_metric.rs`: 演示注册额外的指标提供器。
+- `examples/custom_metric.rs`: 演示注册额外的指标提供器与自动缩放。
+- `examples/bar_scaling_modes.rs`: 展示所有三种性能条缩放模式（固定、自动、百分位）的实际应用。
 
 运行方式：
 
 ```bash
 cargo run --example simple
 cargo run --example custom_metric
+cargo run --example bar_scaling_modes
 ```
 
 ## 性能影响

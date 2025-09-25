@@ -51,6 +51,8 @@ fn create_scaling_demo_settings() -> PerfHudSettings {
 
     // Disable default graph for this demo
     settings.graph.enabled = false;
+    // Widen the bar columns a bit to keep long labels on a single line
+    settings.graph.size.x = 360.0;
 
     // Configure bars with different scaling modes
     settings.bars.bars = vec![
