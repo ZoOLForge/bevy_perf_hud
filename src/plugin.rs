@@ -15,8 +15,8 @@ use bevy::{
 
 use crate::{
     sample_diagnostics, setup_hud, sync_hud_visibility, update_graph_and_bars, BarMaterial,
-    BarScaleStates, GraphScaleState, HistoryBuffers, MetricProviders, MultiLineGraphMaterial, PerfHudSettings,
-    SampledValues,
+    BarScaleStates, GraphScaleState, HistoryBuffers, MetricProviders, MultiLineGraphMaterial,
+    PerfHudSettings, SampledValues,
 };
 
 /// Main plugin for the Bevy Performance HUD.

@@ -74,14 +74,14 @@ fn main() {
         BarConfig {
             metric: latency_metric.clone(),
             show_value: Some(true),
-            min_value: 0.0,     // Fallback minimum
-            max_value: 200.0,   // Fallback maximum
+            min_value: 0.0,   // Fallback minimum
+            max_value: 200.0, // Fallback maximum
             scale_mode: BarScaleMode::Percentile {
-                lower: 10.0,    // P10 - ignore bottom 10% of samples
-                upper: 95.0,    // P95 - ignore top 5% spikes (outliers)
+                lower: 10.0,       // P10 - ignore bottom 10% of samples
+                upper: 95.0,       // P95 - ignore top 5% spikes (outliers)
                 sample_count: 180, // 3 seconds of samples for good statistics
             },
-            min_limit: Some(0.0),   // Hard minimum (latency can't be negative)
+            min_limit: Some(0.0),    // Hard minimum (latency can't be negative)
             max_limit: Some(1000.0), // Hard maximum (cap extreme outliers)
         },
     );
@@ -94,13 +94,13 @@ fn main() {
         .find(|bar| bar.metric.id == "entity_count")
     {
         entity_bar.scale_mode = BarScaleMode::Auto {
-            smoothing: 0.7,     // Moderately smooth transitions
-            min_span: 50.0,     // Minimum range of 50 entities
-            margin_frac: 0.2,   // 20% margin for headroom
+            smoothing: 0.7,   // Moderately smooth transitions
+            min_span: 50.0,   // Minimum range of 50 entities
+            margin_frac: 0.2, // 20% margin for headroom
         };
-        entity_bar.min_limit = Some(0.0);      // Can't be negative
+        entity_bar.min_limit = Some(0.0); // Can't be negative
         entity_bar.max_limit = Some(100000.0); // Reasonable upper bound
-        entity_bar.show_value = Some(true);    // Show actual count
+        entity_bar.show_value = Some(true); // Show actual count
     }
 
     App::new()

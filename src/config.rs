@@ -126,7 +126,7 @@ impl Default for PerfHudSettings {
                         metric: sys_cpu_metric,
                         show_value: Some(false),
                         min_value: 0.0,
-                        max_value: 100.0, // CPU usage percentage
+                        max_value: 100.0,                // CPU usage percentage
                         scale_mode: BarScaleMode::Fixed, // Keep fixed for CPU % (known 0-100% range)
                         min_limit: None,
                         max_limit: None,
@@ -135,7 +135,7 @@ impl Default for PerfHudSettings {
                         metric: sys_mem_metric,
                         show_value: Some(false),
                         min_value: 0.0,
-                        max_value: 100.0, // Memory usage percentage
+                        max_value: 100.0,                // Memory usage percentage
                         scale_mode: BarScaleMode::Fixed, // Keep fixed for memory % (known 0-100% range)
                         min_limit: None,
                         max_limit: None,
@@ -146,9 +146,9 @@ impl Default for PerfHudSettings {
                         min_value: 0.0,
                         max_value: 10000.0, // Entity count range - fallback values
                         scale_mode: BarScaleMode::Auto {
-                            smoothing: 0.85,    // Smooth transitions for entity count changes
-                            min_span: 50.0,     // Minimum range of 50 entities
-                            margin_frac: 0.2,   // 20% margin for growth headroom
+                            smoothing: 0.85,  // Smooth transitions for entity count changes
+                            min_span: 50.0,   // Minimum range of 50 entities
+                            margin_frac: 0.2, // 20% margin for growth headroom
                         },
                         min_limit: Some(0.0),     // Entities can't be negative
                         max_limit: Some(50000.0), // Cap at reasonable maximum

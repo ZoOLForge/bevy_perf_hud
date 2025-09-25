@@ -4,8 +4,8 @@
 //! allowing them to adapt their scale based on historical data rather than
 //! using fixed min/max values.
 
-use std::collections::VecDeque;
 use crate::config::BarScaleMode;
+use std::collections::VecDeque;
 
 /// State for tracking dynamic bar scaling
 #[derive(Debug, Clone)]
@@ -65,12 +65,28 @@ impl BarScaleState {
     ) -> (f32, f32) {
         let (target_min, target_max) = match mode {
             BarScaleMode::Fixed => (fallback_min, fallback_max),
-            BarScaleMode::Auto { smoothing, min_span, margin_frac } => {
-                self.calculate_auto_range(*smoothing, *min_span, *margin_frac, fallback_min, fallback_max)
-            }
-            BarScaleMode::Percentile { lower, upper, sample_count } => {
-                self.calculate_percentile_range(*lower, *upper, *sample_count, fallback_min, fallback_max)
-            }
+            BarScaleMode::Auto {
+                smoothing,
+                min_span,
+                margin_frac,
+            } => self.calculate_auto_range(
+                *smoothing,
+                *min_span,
+                *margin_frac,
+                fallback_min,
+                fallback_max,
+            ),
+            BarScaleMode::Percentile {
+                lower,
+                upper,
+                sample_count,
+            } => self.calculate_percentile_range(
+                *lower,
+                *upper,
+                *sample_count,
+                fallback_min,
+                fallback_max,
+            ),
         };
 
         // Apply hard limits if specified
@@ -170,7 +186,8 @@ impl BarScaleState {
         }
 
         // Get most recent samples
-        let mut recent_values: Vec<f32> = self.history
+        let mut recent_values: Vec<f32> = self
+            .history
             .iter()
             .rev()
             .take(samples_to_use)
@@ -229,11 +246,7 @@ mod tests {
         let mut state = BarScaleState::default();
         state.add_sample(50.0);
 
-        let (min, max) = state.calculate_range(
-            &BarScaleMode::Fixed,
-            0.0, 100.0,
-            None, None
-        );
+        let (min, max) = state.calculate_range(&BarScaleMode::Fixed, 0.0, 100.0, None, None);
 
         assert_eq!(min, 0.0);
         assert_eq!(max, 100.0);
@@ -252,8 +265,10 @@ mod tests {
                 min_span: 1.0,
                 margin_frac: 0.1,
             },
-            0.0, 100.0,
-            None, None
+            0.0,
+            100.0,
+            None,
+            None,
         );
 
         // Should be around data range (10-50) with 10% margins
@@ -272,12 +287,14 @@ mod tests {
 
         let (min, max) = state.calculate_range(
             &BarScaleMode::Percentile {
-                lower: 10.0,  // P10
-                upper: 90.0,  // P90
+                lower: 10.0, // P10
+                upper: 90.0, // P90
                 sample_count: 10,
             },
-            0.0, 200.0,
-            None, None
+            0.0,
+            200.0,
+            None,
+            None,
         );
 
         // P10 should be around 1-2, P90 should be around 9-10 (ignoring the outlier 100)
@@ -296,9 +313,10 @@ mod tests {
                 min_span: 1.0,
                 margin_frac: 0.1,
             },
-            0.0, 100.0,
-            Some(0.0),    // min_limit
-            Some(150.0),  // max_limit
+            0.0,
+            100.0,
+            Some(0.0),   // min_limit
+            Some(150.0), // max_limit
         );
 
         assert!(min >= 0.0);

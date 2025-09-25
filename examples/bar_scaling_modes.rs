@@ -70,12 +70,12 @@ fn create_scaling_demo_settings() -> PerfHudSettings {
         BarConfig {
             metric: auto_mode_metric,
             show_value: Some(true),
-            min_value: 0.0,   // Used as fallback if no data
+            min_value: 0.0,    // Used as fallback if no data
             max_value: 1000.0, // Used as fallback if no data
             scale_mode: BarScaleMode::Auto {
-                smoothing: 0.8,     // Smooth transitions (0.0 = instant, 1.0 = never change)
-                min_span: 100.0,    // Minimum range span
-                margin_frac: 0.1,   // 10% margin above and below data range
+                smoothing: 0.8,   // Smooth transitions (0.0 = instant, 1.0 = never change)
+                min_span: 100.0,  // Minimum range span
+                margin_frac: 0.1, // 10% margin above and below data range
             },
             min_limit: Some(0.0),    // Hard minimum limit
             max_limit: Some(2500.0), // Hard maximum limit
@@ -84,12 +84,12 @@ fn create_scaling_demo_settings() -> PerfHudSettings {
         BarConfig {
             metric: percentile_mode_metric,
             show_value: Some(true),
-            min_value: 0.0,    // Used as fallback if insufficient data
-            max_value: 200.0,  // Used as fallback if insufficient data
+            min_value: 0.0,   // Used as fallback if insufficient data
+            max_value: 200.0, // Used as fallback if insufficient data
             scale_mode: BarScaleMode::Percentile {
-                lower: 5.0,        // P5 percentile for minimum
-                upper: 95.0,       // P95 percentile for maximum
-                sample_count: 60,  // Use last 60 samples (~1 second at 60fps)
+                lower: 5.0,       // P5 percentile for minimum
+                upper: 95.0,      // P95 percentile for maximum
+                sample_count: 60, // Use last 60 samples (~1 second at 60fps)
             },
             min_limit: Some(0.0),    // Hard minimum limit
             max_limit: Some(1000.0), // Hard maximum limit
@@ -100,7 +100,10 @@ fn create_scaling_demo_settings() -> PerfHudSettings {
 }
 
 /// Simulates keyboard input for controlling the demo
-fn simulate_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut settings: ResMut<PerfHudSettings>) {
+fn simulate_input(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut settings: ResMut<PerfHudSettings>,
+) {
     if keyboard_input.just_pressed(KeyCode::Space) {
         settings.enabled = !settings.enabled;
     }
@@ -188,8 +191,8 @@ impl PerfMetricProvider for SpikyMetric {
         self.spike_timer -= delta_time;
 
         // Base level that varies slowly
-        self.base_value = self.min_value +
-            ((self.time * 0.2).sin() * 0.5 + 0.5) * (self.max_value - self.min_value) * 0.3;
+        self.base_value = self.min_value
+            + ((self.time * 0.2).sin() * 0.5 + 0.5) * (self.max_value - self.min_value) * 0.3;
 
         // Trigger random spikes
         if self.spike_timer <= 0.0 {
@@ -201,8 +204,8 @@ impl PerfMetricProvider for SpikyMetric {
         let spike_intensity = if self.spike_timer > 2.5 {
             // In spike - exponential decay
             let spike_progress = (3.0 - self.spike_timer) / 0.5; // 0 to 1 over 0.5 seconds
-            (1.0 - (-spike_progress * 3.0).exp()) *
-                (0.5 + (self.time * 7.3).sin().abs() * 0.5) // Vary spike intensity
+            (1.0 - (-spike_progress * 3.0).exp()) * (0.5 + (self.time * 7.3).sin().abs() * 0.5)
+        // Vary spike intensity
         } else {
             0.0
         };

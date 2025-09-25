@@ -9,6 +9,8 @@
 
 ![Sep-24-2025 18-37-55](https://github.com/ZoOLForge/bevy_perf_hud/raw/main/media/Sep-24-2025%2018-37-55.gif)
 
+![Bar Scaling Modes Demo](https://github.com/ZoOLForge/bevy_perf_hud/raw/main/media/Sep-25-2025%2019-26-06.gif)
+
 A configurable performance heads-up display (HUD) plugin for Bevy applications. Visualize frame pacing, entity counts,
 and resource usage in real time, with extensibility for your own metrics.
 

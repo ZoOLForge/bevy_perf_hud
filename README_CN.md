@@ -9,6 +9,8 @@
 
 ![Sep-24-2025 18-37-55](https://github.com/ZoOLForge/bevy_perf_hud/raw/main/media/Sep-24-2025%2018-37-55.gif)
 
+![条形图缩放模式演示](https://github.com/ZoOLForge/bevy_perf_hud/raw/main/media/Sep-25-2025%2019-26-06.gif)
+
 一个可配置的性能抬头显示器（HUD）插件，专为 Bevy 应用打造。在运行时可视化帧率、实体数量和资源使用情况，并可扩展自定义指标。
 
 ## 目录

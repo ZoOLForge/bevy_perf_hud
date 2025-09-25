@@ -22,7 +22,10 @@ use crate::{
     constants::*,
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
-    resources::{BarScaleStates, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues},
+    resources::{
+        BarScaleStates, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles,
+        SampledValues,
+    },
 };
 
 /// Startup system that creates all HUD UI entities and materials.
