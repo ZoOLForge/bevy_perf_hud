@@ -4,19 +4,30 @@
 //! and that all systems work together properly.
 
 use bevy::prelude::*;
+use bevy::render::settings::RenderCreation;
 use bevy_perf_hud::{BevyPerfHudPlugin, PerfHudSettings};
+
+fn app_with_headless_rendering() -> App {
+    let mut app = App::new();
+
+    app.add_plugins(bevy::MinimalPlugins);
+    app.add_plugins(bevy::asset::AssetPlugin::default());
+
+    let mut render_plugin = bevy::render::RenderPlugin::default();
+
+    if let RenderCreation::Automatic(settings) = &mut render_plugin.render_creation {
+        settings.backends = None;
+    }
+    app.add_plugins(render_plugin);
+
+    app.add_plugins(bevy::ui::UiPlugin::default());
+
+    app
+}
 
 #[test]
 fn plugin_can_be_added_to_app() {
-    let mut app = App::new();
-
-    // Add minimal plugins required for UI materials
-    app.add_plugins((
-        bevy::MinimalPlugins,
-        bevy::asset::AssetPlugin::default(),
-        bevy::render::RenderPlugin::default(),
-        bevy::ui::UiPlugin::default(),
-    ));
+    let mut app = app_with_headless_rendering();
 
     // This should not panic
     app.add_plugins(BevyPerfHudPlugin);
@@ -38,15 +49,7 @@ fn plugin_can_be_added_to_app() {
 
 #[test]
 fn plugin_works_with_custom_settings() {
-    let mut app = App::new();
-
-    // Add minimal plugins required for UI materials
-    app.add_plugins((
-        bevy::MinimalPlugins,
-        bevy::asset::AssetPlugin::default(),
-        bevy::render::RenderPlugin::default(),
-        bevy::ui::UiPlugin::default(),
-    ));
+    let mut app = app_with_headless_rendering();
 
     // Insert custom settings
     let settings = PerfHudSettings {
@@ -66,14 +69,8 @@ fn plugin_works_with_custom_settings() {
 
 #[test]
 fn providers_are_registered_correctly() {
-    let mut app = App::new();
-    app.add_plugins((
-        bevy::MinimalPlugins,
-        bevy::asset::AssetPlugin::default(),
-        bevy::render::RenderPlugin::default(),
-        bevy::ui::UiPlugin::default(),
-        BevyPerfHudPlugin,
-    ));
+    let mut app = app_with_headless_rendering();
+    app.add_plugins(BevyPerfHudPlugin);
 
     // Verify that providers are registered
     let _providers = app.world().resource::<bevy_perf_hud::MetricProviders>();
