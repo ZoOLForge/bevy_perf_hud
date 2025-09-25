@@ -449,7 +449,7 @@ When reporting issues, please include:
 
 | bevy | bevy_perf_hud |
 |------|---------------|
-| 0.16 | 0.1.1         |
+| 0.16 | 0.1.2         |
 
 ## License
 
