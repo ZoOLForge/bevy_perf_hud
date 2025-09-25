@@ -8,13 +8,15 @@ use bevy::{
         EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
         SystemInformationDiagnosticsPlugin,
     },
+    ecs::schedule::common_conditions::resource_changed,
     prelude::IntoScheduleConfigs,
     ui::UiMaterialPlugin,
 };
 
 use crate::{
-    sample_diagnostics, setup_hud, update_graph_and_bars, BarMaterial, GraphScaleState,
-    HistoryBuffers, MetricProviders, MultiLineGraphMaterial, SampledValues,
+    sample_diagnostics, setup_hud, sync_hud_visibility, update_graph_and_bars, BarMaterial,
+    GraphScaleState, HistoryBuffers, MetricProviders, MultiLineGraphMaterial, PerfHudSettings,
+    SampledValues,
 };
 
 /// Main plugin for the Bevy Performance HUD.
@@ -63,7 +65,13 @@ impl Plugin for BevyPerfHudPlugin {
             .init_resource::<GraphScaleState>() // Dynamic scaling state
             // Register systems for HUD lifecycle
             .add_systems(Startup, setup_hud) // Create HUD entities on startup
-            .add_systems(Update, (sample_diagnostics, update_graph_and_bars).chain()); // Update loop
+            .add_systems(
+                Update,
+                (
+                    sync_hud_visibility.run_if(resource_changed::<PerfHudSettings>),
+                    (sample_diagnostics, update_graph_and_bars).chain(),
+                ),
+            ); // Update loop
 
         // Register default metric providers (FPS, frame time, entity count, system info)
         app.world_mut()

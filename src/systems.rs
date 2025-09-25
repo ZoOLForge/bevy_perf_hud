@@ -36,10 +36,6 @@ pub fn setup_hud(
     let Some(s) = settings else {
         return;
     };
-    if !s.enabled {
-        return;
-    }
-
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
     commands.entity(ui_cam).insert(Camera {
@@ -57,6 +53,11 @@ pub fn setup_hud(
             ..default()
         },))
         .id();
+    commands.entity(root).insert(if s.enabled {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    });
 
     // Graph material and node (optional)
     let mut graph_row_opt: Option<Entity> = None;
@@ -100,6 +101,11 @@ pub fn setup_hud(
             },))
             .id();
         commands.entity(graph_row).insert(ChildOf(root));
+        commands.entity(graph_row).insert(if s.enabled {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        });
         graph_row_opt = Some(graph_row);
 
         // Label container (vertical to avoid overlap)
@@ -179,6 +185,11 @@ pub fn setup_hud(
             },))
             .id();
         commands.entity(bars_root).insert(ChildOf(root));
+        commands.entity(bars_root).insert(if s.enabled {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        });
         bars_root_opt = Some(bars_root);
 
         for chunk in s.bars.bars.chunks(column_count) {
@@ -276,6 +287,7 @@ pub fn setup_hud(
 
     // Store handles
     commands.insert_resource(HudHandles {
+        root: Some(root),
         graph_row: graph_row_opt,
         graph_entity: graph_entity_opt,
         graph_material: graph_handle_opt,
@@ -642,5 +654,49 @@ pub fn update_graph_and_bars(
                 }
             }
         }
+    }
+}
+
+/// System that synchronizes HUD visibility with the latest settings.
+///
+/// Runs when [`PerfHudSettings`] changes, toggling visibility of the root
+/// container, graph row and bars section without requiring entity rebuild.
+pub fn sync_hud_visibility(
+    settings: Option<Res<PerfHudSettings>>,
+    handles: Option<Res<HudHandles>>,
+    mut commands: Commands,
+) {
+    let Some(settings) = settings else {
+        return;
+    };
+    let Some(handles) = handles else {
+        return;
+    };
+
+    if let Some(root) = handles.root {
+        commands.entity(root).insert(if settings.enabled {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        });
+    }
+
+    if let Some(graph_row) = handles.graph_row {
+        let graph_visible = settings.enabled && settings.graph.enabled;
+        commands.entity(graph_row).insert(if graph_visible {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        });
+    }
+
+    if let Some(bars_root) = handles.bars_root {
+        let bars_visible =
+            settings.enabled && settings.bars.enabled && !settings.bars.bars.is_empty();
+        commands.entity(bars_root).insert(if bars_visible {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        });
     }
 }
