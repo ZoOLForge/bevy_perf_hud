@@ -6,17 +6,16 @@
 //! - Custom metric tracking with extensible provider system
 //! - Configurable visual appearance and positioning
 
-
-mod constants;
 mod config;
+mod constants;
 mod plugin;
 mod providers;
 mod render;
 mod resources;
 mod systems;
 
-pub use constants::*;
 pub use config::*;
+pub use constants::*;
 pub use plugin::BevyPerfHudPlugin;
 pub use providers::*;
 pub use render::*;

@@ -5,33 +5,33 @@
 
 use bevy::diagnostic::DiagnosticsStore;
 use bevy_perf_hud::{
-    FpsMetricProvider, FrameTimeMetricProvider, EntityCountMetricProvider,
-    MetricSampleContext, PerfMetricProvider,
+    EntityCountMetricProvider, FpsMetricProvider, FrameTimeMetricProvider, MetricSampleContext,
+    PerfMetricProvider,
 };
 
 #[test]
 fn fps_provider_has_correct_id() {
-    let provider = FpsMetricProvider::default();
+    let provider = FpsMetricProvider;
     assert_eq!(provider.metric_id(), "fps");
 }
 
 #[test]
 fn frame_time_provider_has_correct_id() {
-    let provider = FrameTimeMetricProvider::default();
+    let provider = FrameTimeMetricProvider;
     assert_eq!(provider.metric_id(), "frame_time_ms");
 }
 
 #[test]
 fn entity_count_provider_has_correct_id() {
-    let provider = EntityCountMetricProvider::default();
+    let provider = EntityCountMetricProvider;
     assert_eq!(provider.metric_id(), "entity_count");
 }
 
 #[test]
 fn providers_handle_missing_diagnostics_gracefully() {
-    let mut fps_provider = FpsMetricProvider::default();
-    let mut frame_time_provider = FrameTimeMetricProvider::default();
-    let mut entity_count_provider = EntityCountMetricProvider::default();
+    let mut fps_provider = FpsMetricProvider;
+    let mut frame_time_provider = FrameTimeMetricProvider;
+    let mut entity_count_provider = EntityCountMetricProvider;
 
     let ctx = MetricSampleContext { diagnostics: None };
 
@@ -43,9 +43,9 @@ fn providers_handle_missing_diagnostics_gracefully() {
 
 #[test]
 fn providers_handle_empty_diagnostics_gracefully() {
-    let mut fps_provider = FpsMetricProvider::default();
-    let mut frame_time_provider = FrameTimeMetricProvider::default();
-    let mut entity_count_provider = EntityCountMetricProvider::default();
+    let mut fps_provider = FpsMetricProvider;
+    let mut frame_time_provider = FrameTimeMetricProvider;
+    let mut entity_count_provider = EntityCountMetricProvider;
 
     let diagnostics = DiagnosticsStore::default();
     let ctx = MetricSampleContext {

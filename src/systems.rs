@@ -14,17 +14,15 @@ use bevy::{
     },
     prelude::*,
     text::{TextColor, TextFont},
-    ui::{
-        FlexDirection, MaterialNode, Node, Overflow, PositionType, UiRect, Val,
-    },
+    ui::{FlexDirection, MaterialNode, Node, Overflow, PositionType, UiRect, Val},
 };
 
 use crate::{
     config::PerfHudSettings,
+    constants::*,
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
     resources::{GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues},
-    constants::*,
 };
 
 /// Startup system that creates all HUD UI entities and materials.

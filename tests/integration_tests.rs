@@ -19,13 +19,21 @@ fn plugin_can_be_added_to_app() {
     ));
 
     // This should not panic
-    app.add_plugins(BevyPerfHudPlugin::default());
+    app.add_plugins(BevyPerfHudPlugin);
 
     // Verify that the plugin registered its resources
-    assert!(app.world().contains_resource::<bevy_perf_hud::SampledValues>());
-    assert!(app.world().contains_resource::<bevy_perf_hud::MetricProviders>());
-    assert!(app.world().contains_resource::<bevy_perf_hud::HistoryBuffers>());
-    assert!(app.world().contains_resource::<bevy_perf_hud::GraphScaleState>());
+    assert!(app
+        .world()
+        .contains_resource::<bevy_perf_hud::SampledValues>());
+    assert!(app
+        .world()
+        .contains_resource::<bevy_perf_hud::MetricProviders>());
+    assert!(app
+        .world()
+        .contains_resource::<bevy_perf_hud::HistoryBuffers>());
+    assert!(app
+        .world()
+        .contains_resource::<bevy_perf_hud::GraphScaleState>());
 }
 
 #[test]
@@ -48,7 +56,7 @@ fn plugin_works_with_custom_settings() {
     };
 
     app.insert_resource(settings);
-    app.add_plugins(BevyPerfHudPlugin::default());
+    app.add_plugins(BevyPerfHudPlugin);
 
     // Should not panic and settings should be preserved
     let stored_settings = app.world().resource::<PerfHudSettings>();
@@ -64,7 +72,7 @@ fn providers_are_registered_correctly() {
         bevy::asset::AssetPlugin::default(),
         bevy::render::RenderPlugin::default(),
         bevy::ui::UiPlugin::default(),
-        BevyPerfHudPlugin::default(),
+        BevyPerfHudPlugin,
     ));
 
     // Verify that providers are registered
@@ -72,5 +80,7 @@ fn providers_are_registered_correctly() {
 
     // We can't access private fields, but we can verify the resource exists
     // and that default providers were added by checking if they handle known metrics
-    assert!(app.world().contains_resource::<bevy_perf_hud::MetricProviders>());
+    assert!(app
+        .world()
+        .contains_resource::<bevy_perf_hud::MetricProviders>());
 }

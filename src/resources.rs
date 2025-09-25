@@ -2,11 +2,7 @@
 //!
 //! This module contains all runtime state resources used by the HUD systems.
 
-use bevy::{
-    asset::Handle,
-    ecs::entity::Entity,
-    prelude::Resource,
-};
+use bevy::{asset::Handle, ecs::entity::Entity, prelude::Resource};
 use std::collections::HashMap;
 
 use crate::{BarMaterial, MultiLineGraphMaterial, MAX_CURVES, MAX_SAMPLES};

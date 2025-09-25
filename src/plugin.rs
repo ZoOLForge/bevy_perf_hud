@@ -4,14 +4,17 @@
 
 use bevy::{
     app::{App, Plugin, Startup, Update},
-    diagnostic::{EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin, SystemInformationDiagnosticsPlugin},
+    diagnostic::{
+        EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
+        SystemInformationDiagnosticsPlugin,
+    },
     prelude::IntoScheduleConfigs,
     ui::UiMaterialPlugin,
 };
 
 use crate::{
-    BarMaterial, GraphScaleState, HistoryBuffers, MetricProviders, MultiLineGraphMaterial,
-    SampledValues, sample_diagnostics, setup_hud, update_graph_and_bars
+    sample_diagnostics, setup_hud, update_graph_and_bars, BarMaterial, GraphScaleState,
+    HistoryBuffers, MetricProviders, MultiLineGraphMaterial, SampledValues,
 };
 
 /// Main plugin for the Bevy Performance HUD.

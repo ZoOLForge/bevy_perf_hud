@@ -2,8 +2,8 @@
 //!
 //! This module contains all configuration types for customizing the performance HUD.
 
-use bevy::{color::Color, math::Vec2, prelude::Resource};
 use crate::constants::*;
+use bevy::{color::Color, math::Vec2, prelude::Resource};
 
 /// Main configuration resource for the performance HUD.
 ///
