@@ -5,7 +5,7 @@
 use bevy::{asset::Handle, ecs::entity::Entity, prelude::Resource};
 use std::collections::HashMap;
 
-use crate::{BarMaterial, MultiLineGraphMaterial, MAX_CURVES, MAX_SAMPLES};
+use crate::{BarMaterial, BarScaleState, MultiLineGraphMaterial, MAX_CURVES, MAX_SAMPLES};
 
 /// Handle to a graph label entity, linking it to its metric.
 ///
@@ -117,4 +117,37 @@ pub struct GraphScaleState {
     pub min_y: f32,
     /// Current smoothed maximum Y-axis value
     pub max_y: f32,
+}
+
+/// Resource storing dynamic scaling states for all performance bars.
+///
+/// Each bar can have its own dynamic scaling behavior based on its configured
+/// BarScaleMode. This resource tracks the historical data and current range
+/// for each bar independently.
+#[derive(Resource, Default)]
+pub struct BarScaleStates {
+    /// Map from metric ID to its scaling state
+    states: HashMap<String, BarScaleState>,
+}
+
+impl BarScaleStates {
+    /// Get mutable reference to a bar's scale state, creating it if needed
+    pub fn get_or_create(&mut self, metric_id: &str) -> &mut BarScaleState {
+        self.states.entry(metric_id.to_owned()).or_default()
+    }
+
+    /// Get reference to a bar's scale state if it exists
+    pub fn get(&self, metric_id: &str) -> Option<&BarScaleState> {
+        self.states.get(metric_id)
+    }
+
+    /// Clear all scaling states (useful when configuration changes)
+    pub fn clear(&mut self) {
+        self.states.clear();
+    }
+
+    /// Remove a specific bar's scaling state
+    pub fn remove(&mut self, metric_id: &str) -> Option<BarScaleState> {
+        self.states.remove(metric_id)
+    }
 }

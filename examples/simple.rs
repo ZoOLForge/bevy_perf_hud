@@ -1,6 +1,6 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
-use bevy_perf_hud::{BevyPerfHudPlugin, HudHandles, PerfHudSettings};
+use bevy_perf_hud::{BarConfig, BarScaleMode, BevyPerfHudPlugin, HudHandles, MetricDefinition, PerfHudSettings};
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
 enum HudMode {
@@ -308,9 +308,51 @@ fn main() {
         .init_resource::<RngState>()
         .init_resource::<CubeState>()
         .init_resource::<HudMode>()
-        .insert_resource(PerfHudSettings {
-            origin: Vec2::new(960.0, 16.0),
-            ..default()
+        .insert_resource({
+            let mut settings = PerfHudSettings {
+                origin: Vec2::new(960.0, 16.0),
+                ..default()
+            };
+
+            // Customize the entity count bar to use auto-scaling
+            // since entity count varies dramatically in this demo
+            if let Some(entity_bar) = settings
+                .bars
+                .bars
+                .iter_mut()
+                .find(|bar| bar.metric.id == "entity_count")
+            {
+                entity_bar.scale_mode = BarScaleMode::Auto {
+                    smoothing: 0.8,     // Smooth scaling changes
+                    min_span: 100.0,    // Minimum range of 100 entities
+                    margin_frac: 0.25,  // 25% headroom for spawning bursts
+                };
+                entity_bar.show_value = Some(true); // Show actual entity count
+            }
+
+            // Add FPS bar with percentile scaling to handle frame spikes
+            let fps_metric = MetricDefinition {
+                id: "fps".into(),
+                label: Some("FPS (P5-P95)".into()),
+                unit: Some("fps".into()),
+                precision: 0,
+                color: Color::srgb(0.2, 0.8, 0.2),
+            };
+            settings.bars.bars.insert(0, BarConfig {
+                metric: fps_metric,
+                show_value: Some(true),
+                min_value: 0.0,   // Fallback minimum
+                max_value: 144.0, // Fallback maximum
+                scale_mode: BarScaleMode::Percentile {
+                    lower: 5.0,       // P5 - ignore bottom 5% of frames
+                    upper: 95.0,      // P95 - ignore top 5% spikes
+                    sample_count: 120, // 2 seconds at 60fps
+                },
+                min_limit: Some(0.0),   // FPS can't be negative
+                max_limit: Some(300.0), // Cap at reasonable maximum
+            });
+
+            settings
         })
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {

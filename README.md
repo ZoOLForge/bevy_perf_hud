@@ -129,13 +129,19 @@ fn main() {
             {
                 fps_curve.smoothing = Some(0.15);
             }
-            if let Some(cpu_bar) = settings
+            // Modify the entity count bar to use auto-scaling
+            if let Some(entity_bar) = settings
                 .bars
                 .bars
                 .iter_mut()
-                .find(|bar| bar.metric.id == "system/cpu_usage")
+                .find(|bar| bar.metric.id == "entity_count")
             {
-                cpu_bar.max_value = 85.0;
+                entity_bar.scale_mode = bevy_perf_hud::BarScaleMode::Auto {
+                    smoothing: 0.8,     // Smooth range transitions
+                    min_span: 100.0,    // Minimum range of 100 entities
+                    margin_frac: 0.2,   // 20% margin for growth headroom
+                };
+                entity_bar.show_value = Some(true);
             }
             settings
         })
@@ -144,6 +150,68 @@ fn main() {
         .run();
 }
 ```
+
+### Bar Scaling Modes
+
+Performance bars can use different scaling modes to adapt their range dynamically:
+
+#### Fixed Mode (Default)
+Uses static `min_value` and `max_value` - traditional behavior with predictable, stable ranges.
+
+```rust
+use bevy_perf_hud::{BarConfig, BarScaleMode, MetricDefinition};
+
+BarConfig {
+    metric: MetricDefinition { /* ... */ },
+    min_value: 0.0,
+    max_value: 100.0,
+    scale_mode: BarScaleMode::Fixed, // Uses min_value/max_value directly
+    // ...
+}
+```
+
+#### Auto Mode
+Automatically adjusts range based on historical data with smooth transitions:
+
+```rust
+BarConfig {
+    metric: MetricDefinition { /* ... */ },
+    min_value: 0.0,   // Fallback if no data
+    max_value: 100.0, // Fallback if no data
+    scale_mode: BarScaleMode::Auto {
+        smoothing: 0.8,     // Range change smoothing (0.0=instant, 1.0=never)
+        min_span: 10.0,     // Minimum range span to prevent division by zero
+        margin_frac: 0.15,  // Margin fraction above/below data (0.0-0.5)
+    },
+    min_limit: Some(0.0),    // Hard minimum bound (optional)
+    max_limit: Some(500.0),  // Hard maximum bound (optional)
+    // ...
+}
+```
+
+#### Percentile Mode
+Uses percentiles of recent samples - ideal for spiky data like latency:
+
+```rust
+BarConfig {
+    metric: MetricDefinition { /* ... */ },
+    min_value: 0.0,   // Fallback if insufficient samples
+    max_value: 100.0, // Fallback if insufficient samples
+    scale_mode: BarScaleMode::Percentile {
+        lower: 5.0,        // P5 percentile for minimum (ignores bottom 5%)
+        upper: 95.0,       // P95 percentile for maximum (ignores top 5%)
+        sample_count: 60,  // Number of recent samples to analyze
+    },
+    min_limit: Some(0.0),    // Hard bounds prevent extreme outliers
+    max_limit: Some(1000.0),
+    // ...
+}
+```
+
+**Use Cases:**
+- **Fixed**: CPU/memory percentages, FPS with known limits
+- **Auto**: Variable metrics like entity counts, memory usage in MB
+- **Percentile**: Network latency, frame spikes, any metric with outliers
 
 ## Built-in Metrics
 
@@ -294,16 +362,18 @@ fn update_game_stats(
 
 ## Examples
 
-The repository ships with two runnable examples:
+The repository ships with several runnable examples:
 
 - `examples/simple.rs`: 3D scene with keyboard shortcuts (Space spawns cubes, F1 toggles HUD modes).
-- `examples/custom_metric.rs`: Demonstrates registering an additional metric provider.
+- `examples/custom_metric.rs`: Demonstrates registering an additional metric provider with auto-scaling.
+- `examples/bar_scaling_modes.rs`: Shows all three bar scaling modes (Fixed, Auto, Percentile) in action.
 
 Run them with:
 
 ```bash
 cargo run --example simple
 cargo run --example custom_metric
+cargo run --example bar_scaling_modes
 ```
 
 ## Performance Impact

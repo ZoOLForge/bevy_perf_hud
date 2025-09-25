@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    BarConfig, BevyPerfHudPlugin, CurveConfig, MetricDefinition, MetricSampleContext,
+    BarConfig, BarScaleMode, BevyPerfHudPlugin, CurveConfig, MetricDefinition, MetricSampleContext,
     PerfHudAppExt, PerfHudSettings, PerfMetricProvider,
 };
 
@@ -67,16 +67,41 @@ fn main() {
         quantize_step: Some(0.5),
     });
 
-    // Insert the custom metric at the beginning of the bars list
+    // Add custom latency metric with percentile scaling
+    // Percentile mode is perfect for latency as it handles spikes gracefully
     settings.bars.bars.insert(
         0,
         BarConfig {
             metric: latency_metric.clone(),
             show_value: Some(true),
-            min_value: 0.0,
-            max_value: 200.0, // Max 200ms latency
+            min_value: 0.0,     // Fallback minimum
+            max_value: 200.0,   // Fallback maximum
+            scale_mode: BarScaleMode::Percentile {
+                lower: 10.0,    // P10 - ignore bottom 10% of samples
+                upper: 95.0,    // P95 - ignore top 5% spikes (outliers)
+                sample_count: 180, // 3 seconds of samples for good statistics
+            },
+            min_limit: Some(0.0),   // Hard minimum (latency can't be negative)
+            max_limit: Some(1000.0), // Hard maximum (cap extreme outliers)
         },
     );
+
+    // Also modify the entity count bar to use auto-scaling for better demo
+    if let Some(entity_bar) = settings
+        .bars
+        .bars
+        .iter_mut()
+        .find(|bar| bar.metric.id == "entity_count")
+    {
+        entity_bar.scale_mode = BarScaleMode::Auto {
+            smoothing: 0.7,     // Moderately smooth transitions
+            min_span: 50.0,     // Minimum range of 50 entities
+            margin_frac: 0.2,   // 20% margin for headroom
+        };
+        entity_bar.min_limit = Some(0.0);      // Can't be negative
+        entity_bar.max_limit = Some(100000.0); // Reasonable upper bound
+        entity_bar.show_value = Some(true);    // Show actual count
+    }
 
     App::new()
         .insert_resource(ClearColor(Color::srgba(0.02, 0.02, 0.05, 1.0)))

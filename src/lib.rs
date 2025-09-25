@@ -6,6 +6,7 @@
 //! - Custom metric tracking with extensible provider system
 //! - Configurable visual appearance and positioning
 
+mod bar_scale;
 mod config;
 mod constants;
 mod plugin;
@@ -14,6 +15,7 @@ mod render;
 mod resources;
 mod systems;
 
+pub use bar_scale::*;
 pub use config::*;
 pub use constants::*;
 pub use plugin::BevyPerfHudPlugin;

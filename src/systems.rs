@@ -22,7 +22,7 @@ use crate::{
     constants::*,
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
-    resources::{GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues},
+    resources::{BarScaleStates, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues},
 };
 
 /// Startup system that creates all HUD UI entities and materials.
@@ -335,6 +335,7 @@ pub fn update_graph_and_bars(
     samples: Res<SampledValues>,
     mut history: ResMut<HistoryBuffers>,
     mut scale_state: ResMut<GraphScaleState>,
+    mut bar_scale_states: ResMut<BarScaleStates>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     _label_node_q: Query<&mut Node>,
@@ -597,12 +598,29 @@ pub fn update_graph_and_bars(
                 break;
             }
             let val = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
-            // FIXED: Use bar-specific normalization range instead of graph Y-axis
-            let norm = if cfg.max_value > cfg.min_value {
-                ((val - cfg.min_value) / (cfg.max_value - cfg.min_value)).clamp(0.0, 1.0)
+
+            // Get or create the scale state for this bar
+            let scale_state = bar_scale_states.get_or_create(&cfg.metric.id);
+
+            // Add current value to the scale state's history
+            scale_state.add_sample(val);
+
+            // Calculate the dynamic range based on the bar's scale mode
+            let (range_min, range_max) = scale_state.calculate_range(
+                &cfg.scale_mode,
+                cfg.min_value,
+                cfg.max_value,
+                cfg.min_limit,
+                cfg.max_limit,
+            );
+
+            // Normalize the value using the calculated range
+            let norm = if range_max > range_min {
+                ((val - range_min) / (range_max - range_min)).clamp(0.0, 1.0)
             } else {
                 0.0
             };
+
             if let Some(mat) = bar_mats.get_mut(&h.bar_materials[i]) {
                 mat.params.value = norm;
                 let v = cfg.metric.color.to_linear().to_vec4();

@@ -15,7 +15,7 @@ use bevy::{
 
 use crate::{
     sample_diagnostics, setup_hud, sync_hud_visibility, update_graph_and_bars, BarMaterial,
-    GraphScaleState, HistoryBuffers, MetricProviders, MultiLineGraphMaterial, PerfHudSettings,
+    BarScaleStates, GraphScaleState, HistoryBuffers, MetricProviders, MultiLineGraphMaterial, PerfHudSettings,
     SampledValues,
 };
 
@@ -63,6 +63,7 @@ impl Plugin for BevyPerfHudPlugin {
             .init_resource::<MetricProviders>() // Registry of metric sources
             .init_resource::<HistoryBuffers>() // Historical data for graphs
             .init_resource::<GraphScaleState>() // Dynamic scaling state
+            .init_resource::<BarScaleStates>() // Bar scaling states
             // Register systems for HUD lifecycle
             .add_systems(Startup, setup_hud) // Create HUD entities on startup
             .add_systems(

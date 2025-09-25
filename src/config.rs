@@ -127,18 +127,31 @@ impl Default for PerfHudSettings {
                         show_value: Some(false),
                         min_value: 0.0,
                         max_value: 100.0, // CPU usage percentage
+                        scale_mode: BarScaleMode::Fixed, // Keep fixed for CPU % (known 0-100% range)
+                        min_limit: None,
+                        max_limit: None,
                     },
                     BarConfig {
                         metric: sys_mem_metric,
                         show_value: Some(false),
                         min_value: 0.0,
                         max_value: 100.0, // Memory usage percentage
+                        scale_mode: BarScaleMode::Fixed, // Keep fixed for memory % (known 0-100% range)
+                        min_limit: None,
+                        max_limit: None,
                     },
                     BarConfig {
                         metric: entity_metric,
                         show_value: None,
                         min_value: 0.0,
-                        max_value: 10000.0, // Entity count range
+                        max_value: 10000.0, // Entity count range - fallback values
+                        scale_mode: BarScaleMode::Auto {
+                            smoothing: 0.85,    // Smooth transitions for entity count changes
+                            min_span: 50.0,     // Minimum range of 50 entities
+                            margin_frac: 0.2,   // 20% margin for growth headroom
+                        },
+                        min_limit: Some(0.0),     // Entities can't be negative
+                        max_limit: Some(50000.0), // Cap at reasonable maximum
                     },
                 ],
             },
@@ -249,6 +262,37 @@ pub struct CurveDefaults {
     pub quantize_step: f32,
 }
 
+/// Bar scaling mode determines how the bar range is calculated.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BarScaleMode {
+    /// Fixed range using min_value and max_value (default behavior)
+    Fixed,
+    /// Automatic range adjustment based on historical data
+    Auto {
+        /// Smoothing factor for range changes (0.0 = instant, 1.0 = never change)
+        smoothing: f32,
+        /// Minimum span between min and max to avoid division by zero
+        min_span: f32,
+        /// Margin fraction to add above and below data range (0.0-0.5)
+        margin_frac: f32,
+    },
+    /// Range based on percentiles of recent data
+    Percentile {
+        /// Lower percentile (e.g., 5.0 for P5)
+        lower: f32,
+        /// Upper percentile (e.g., 95.0 for P95)
+        upper: f32,
+        /// Number of recent samples to consider
+        sample_count: usize,
+    },
+}
+
+impl Default for BarScaleMode {
+    fn default() -> Self {
+        Self::Fixed
+    }
+}
+
 /// Configuration for a single performance bar.
 ///
 /// Each bar represents one metric displayed as a horizontal progress indicator.
@@ -258,10 +302,16 @@ pub struct BarConfig {
     pub metric: MetricDefinition,
     /// Whether to show numeric value and unit (None = use bars default)
     pub show_value: Option<bool>,
-    /// Minimum value for bar normalization (0% fill)
+    /// Minimum value for bar normalization (0% fill) - used in Fixed mode or as hard limit
     pub min_value: f32,
-    /// Maximum value for bar normalization (100% fill)
+    /// Maximum value for bar normalization (100% fill) - used in Fixed mode or as hard limit
     pub max_value: f32,
+    /// How to calculate the bar's value range
+    pub scale_mode: BarScaleMode,
+    /// Hard minimum limit (values below this are clamped) - optional override
+    pub min_limit: Option<f32>,
+    /// Hard maximum limit (values above this are clamped) - optional override
+    pub max_limit: Option<f32>,
 }
 
 /// Definition of a performance metric for display purposes.
