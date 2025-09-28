@@ -25,9 +25,10 @@ use crate::{
     GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues,
 };
 
-/// Startup system that creates all HUD UI entities and materials.
-/// The system only runs if PerfHudSettings is present and enabled.
-pub fn setup_hud(
+/// Function that creates all HUD UI entities and materials.
+/// This function is designed to be called by user code to create the HUD layout.
+
+pub fn create_hud(
     mut commands: Commands,
     settings: Option<Res<PerfHudSettings>>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
@@ -352,7 +353,7 @@ pub fn update_graph_and_bars(
         return;
     };
 
-    let Ok((mut h, samples, mut history, mut scale_state, mut bar_scale_states)) =
+    let Ok((h, samples, mut history, mut scale_state, mut bar_scale_states)) =
         hud_query.single_mut()
     else {
         return;

@@ -3,7 +3,7 @@
 //! This module contains the main [`BevyPerfHudPlugin`] and its setup logic.
 
 use bevy::{
-    app::{App, Plugin, Startup, Update},
+    app::{App, Plugin, Update},
     diagnostic::{
         EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
         SystemInformationDiagnosticsPlugin,
@@ -13,7 +13,7 @@ use bevy::{
 };
 
 use crate::{
-    sample_diagnostics, setup_hud, update_graph_and_bars, BarMaterial,
+    sample_diagnostics, update_graph_and_bars, BarMaterial,
     MetricProviders, MultiLineGraphMaterial,
 };
 
@@ -59,7 +59,6 @@ impl Plugin for BevyPerfHudPlugin {
             // Initialize metric providers resource (this is still needed as global config)
             .init_resource::<MetricProviders>() // Registry of metric sources
             // Register systems for HUD lifecycle
-            .add_systems(Startup, setup_hud) // Create HUD entities on startup
             .add_systems(
                 Update,
                 (

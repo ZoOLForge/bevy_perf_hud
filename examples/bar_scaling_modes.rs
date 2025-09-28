@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BarConfig, BarScaleMode, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfHudSettings, PerfMetricProvider,
+    PerfHudAppExt, PerfHudSettings, PerfMetricProvider, create_hud,
 };
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
@@ -11,6 +11,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(BevyPerfHudPlugin)
         .insert_resource(create_scaling_demo_settings())
+        .add_systems(Startup, create_hud) // Create HUD layout
         .add_perf_metric_provider(VariableMetric::new("variable/cpu_load", 0.0, 100.0))
         .add_perf_metric_provider(VariableMetric::new("variable/memory_usage", 100.0, 2000.0))
         .add_perf_metric_provider(SpikyMetric::new("spiky/latency", 10.0, 500.0))

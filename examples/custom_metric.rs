@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BarConfig, BarScaleMode, BevyPerfHudPlugin, CurveConfig, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfHudSettings, PerfMetricProvider,
+    PerfHudAppExt, PerfHudSettings, PerfMetricProvider, create_hud,
 };
 
 const CUSTOM_METRIC_ID: &str = "custom/network_latency_ms";
@@ -116,6 +116,7 @@ fn main() {
         }))
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_scene)
+        .add_systems(Startup, create_hud) // Create HUD layout
         .add_perf_metric_provider(NetworkLatencyMetric::default())
         .run();
 }

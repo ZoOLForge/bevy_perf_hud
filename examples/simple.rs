@@ -1,7 +1,8 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    BarConfig, BarScaleMode, BevyPerfHudPlugin, HudHandles, MetricDefinition, PerfHudSettings,
+    create_hud, BarConfig, BarScaleMode, BevyPerfHudPlugin, HudHandles, MetricDefinition,
+    PerfHudSettings,
 };
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
@@ -370,6 +371,7 @@ fn main() {
         }))
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_3d)
+        .add_systems(Startup, create_hud)
         .add_systems(
             Update,
             (
