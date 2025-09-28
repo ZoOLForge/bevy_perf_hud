@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 // This module is being deprecated as BarScaleState has been moved to components.rs
 // The functions here are preserved for any direct usage that might exist elsewhere
-use crate::config::BarScaleMode;
+use crate::components::BarScaleMode;
 
 /// Calculate the range based on the configured scale mode
 pub fn calculate_range(
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_limits() {
-        use crate::BarScaleState; // Use the actual implementation
+        use crate::components::BarScaleState; // Use the actual implementation
         let mut state = BarScaleState::default();
         state.add_sample(200.0);
 

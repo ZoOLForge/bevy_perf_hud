@@ -19,7 +19,7 @@ use bevy::{
 
 use crate::{
     constants::*,
-    hud_settings_components::{BarsConfig, GraphConfig, HudOrigin},
+    components::{BarsConfig, GraphConfig, HudOrigin},
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
     BarsHandles, GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues,
@@ -936,7 +936,7 @@ pub fn update_graph_and_bars(
 
             // Calculate the dynamic range based on the bar's scale mode
             let (range_min, range_max) = scale_state.calculate_range(
-                &cfg.scale_mode.clone().into(), // Convert to config::BarScaleMode
+                &cfg.scale_mode,
                 cfg.min_value,
                 cfg.max_value,
                 cfg.min_limit,
@@ -1288,7 +1288,7 @@ pub fn update_bars(
 
                 // Calculate the dynamic range based on the bar's scale mode
                 let (range_min, range_max) = scale_state.calculate_range(
-                    &cfg.scale_mode.clone().into(), // Convert to config::BarScaleMode
+                    &cfg.scale_mode,
                     cfg.min_value,
                     cfg.max_value,
                     cfg.min_limit,
