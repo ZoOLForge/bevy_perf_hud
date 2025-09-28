@@ -1,7 +1,7 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    create_hud, BarsConfig, BarScaleState, BevyPerfHudPlugin, HudHandles, GraphConfig, 
+    create_hud, BarsConfig, BevyPerfHudPlugin, HudHandles, 
     HudOrigin, BarConfig, BarScaleMode, MetricDefinition
 };
 
