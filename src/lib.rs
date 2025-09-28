@@ -7,6 +7,7 @@
 //! - Configurable visual appearance and positioning
 
 mod bar_scale;
+mod components;
 mod config;
 mod constants;
 mod plugin;
@@ -16,10 +17,10 @@ mod resources;
 mod systems;
 
 pub use bar_scale::*;
+pub use components::*;
 pub use config::*;
 pub use constants::*;
 pub use plugin::BevyPerfHudPlugin;
 pub use providers::*;
 pub use render::*;
-pub use resources::*;
 pub use systems::*;

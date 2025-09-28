@@ -15,8 +15,7 @@ use bevy::{
 
 use crate::{
     sample_diagnostics, setup_hud, sync_hud_visibility, update_graph_and_bars, BarMaterial,
-    BarScaleStates, GraphScaleState, HistoryBuffers, MetricProviders, MultiLineGraphMaterial,
-    PerfHudSettings, SampledValues,
+    MetricProviders, MultiLineGraphMaterial, PerfHudSettings,
 };
 
 /// Main plugin for the Bevy Performance HUD.
@@ -58,12 +57,8 @@ impl Plugin for BevyPerfHudPlugin {
         // These use custom shaders for efficient real-time performance visualization
         app.add_plugins(UiMaterialPlugin::<MultiLineGraphMaterial>::default())
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
-            // Initialize core resources for HUD state management
-            .init_resource::<SampledValues>() // Current metric values
+            // Initialize metric providers resource (this is still needed as global config)
             .init_resource::<MetricProviders>() // Registry of metric sources
-            .init_resource::<HistoryBuffers>() // Historical data for graphs
-            .init_resource::<GraphScaleState>() // Dynamic scaling state
-            .init_resource::<BarScaleStates>() // Bar scaling states
             // Register systems for HUD lifecycle
             .add_systems(Startup, setup_hud) // Create HUD entities on startup
             .add_systems(

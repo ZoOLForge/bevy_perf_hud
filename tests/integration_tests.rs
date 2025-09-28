@@ -35,16 +35,7 @@ fn plugin_can_be_added_to_app() {
     // Verify that the plugin registered its resources
     assert!(app
         .world()
-        .contains_resource::<bevy_perf_hud::SampledValues>());
-    assert!(app
-        .world()
         .contains_resource::<bevy_perf_hud::MetricProviders>());
-    assert!(app
-        .world()
-        .contains_resource::<bevy_perf_hud::HistoryBuffers>());
-    assert!(app
-        .world()
-        .contains_resource::<bevy_perf_hud::GraphScaleState>());
 }
 
 #[test]

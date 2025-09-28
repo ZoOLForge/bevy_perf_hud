@@ -259,13 +259,14 @@ fn adjust_spawn_and_camera_keys(
 fn toggle_hud_mode_on_f1(
     keys: Res<ButtonInput<KeyCode>>,
     mut mode: ResMut<HudMode>,
-    handles: Option<Res<HudHandles>>,
+    hud_query: Query<&HudHandles>,
     mut commands: Commands,
 ) {
     if !keys.just_pressed(KeyCode::F1) {
         return;
     }
-    let Some(h) = handles else {
+
+    let Ok(h) = hud_query.single() else {
         return;
     };
 

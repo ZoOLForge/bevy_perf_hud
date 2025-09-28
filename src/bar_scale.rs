@@ -4,237 +4,159 @@
 //! allowing them to adapt their scale based on historical data rather than
 //! using fixed min/max values.
 
-use crate::config::BarScaleMode;
 use std::collections::VecDeque;
 
-/// State for tracking dynamic bar scaling
-#[derive(Debug, Clone)]
-pub struct BarScaleState {
-    /// Current minimum value for normalization
-    pub current_min: f32,
-    /// Current maximum value for normalization
-    pub current_max: f32,
-    /// Historical values for auto/percentile calculation
-    pub history: VecDeque<f32>,
-    /// Maximum number of samples to keep in history
-    pub max_samples: usize,
+// This module is being deprecated as BarScaleState has been moved to components.rs
+// The functions here are preserved for any direct usage that might exist elsewhere
+use crate::config::BarScaleMode;
+
+/// Calculate the range based on the configured scale mode
+pub fn calculate_range(
+    history: &VecDeque<f32>,
+    current_min: f32,
+    current_max: f32,
+    mode: &BarScaleMode,
+    fallback_min: f32,
+    fallback_max: f32,
+    min_limit: Option<f32>,
+    max_limit: Option<f32>,
+) -> (f32, f32) {
+    let (target_min, target_max) = match mode {
+        BarScaleMode::Fixed => (fallback_min, fallback_max),
+        BarScaleMode::Auto {
+            smoothing,
+            min_span,
+            margin_frac,
+        } => calculate_auto_range(
+            history,
+            current_min,
+            current_max,
+            *smoothing,
+            *min_span,
+            *margin_frac,
+            fallback_min,
+            fallback_max,
+        ),
+        BarScaleMode::Percentile {
+            lower,
+            upper,
+            sample_count,
+        } => calculate_percentile_range(
+            history,
+            *lower,
+            *upper,
+            *sample_count,
+            fallback_min,
+            fallback_max,
+        ),
+    };
+
+    // Apply hard limits if specified
+    let final_min = match min_limit {
+        Some(limit) => target_min.max(limit),
+        None => target_min,
+    };
+    let final_max = match max_limit {
+        Some(limit) => target_max.min(limit),
+        None => target_max,
+    };
+
+    // Ensure valid range, but respect hard limits
+    let final_max = if final_max < final_min {
+        // If limits conflict, adjust final_min down to final_max
+        final_min - 1e-6
+    } else {
+        final_max.max(final_min + 1e-6)
+    };
+    let final_min = if final_max < final_min {
+        final_max - 1e-6
+    } else {
+        final_min
+    };
+
+    (final_min, final_max)
 }
 
-impl Default for BarScaleState {
-    fn default() -> Self {
-        Self {
-            current_min: 0.0,
-            current_max: 1.0,
-            history: VecDeque::new(),
-            max_samples: 120, // ~2 seconds at 60fps
-        }
+/// Calculate automatic range based on data statistics
+fn calculate_auto_range(
+    history: &VecDeque<f32>,
+    current_min: f32,
+    current_max: f32,
+    smoothing: f32,
+    min_span: f32,
+    margin_frac: f32,
+    fallback_min: f32,
+    fallback_max: f32,
+) -> (f32, f32) {
+    if history.is_empty() {
+        return (fallback_min, fallback_max);
+    }
+
+    // Calculate data range
+    let mut data_min = f32::INFINITY;
+    let mut data_max = f32::NEG_INFINITY;
+
+    for &value in history {
+        data_min = data_min.min(value);
+        data_max = data_max.max(value);
+    }
+
+    if !data_min.is_finite() || !data_max.is_finite() {
+        return (fallback_min, fallback_max);
+    }
+
+    // Ensure minimum span
+    let span = (data_max - data_min).max(min_span.max(1e-3));
+    if data_max - data_min < span {
+        let mid = 0.5 * (data_max + data_min);
+        data_min = mid - 0.5 * span;
+        data_max = mid + 0.5 * span;
+    }
+
+    // Add margins
+    let margin = span * margin_frac.clamp(0.0, 0.45);
+    let target_min = data_min - margin;
+    let target_max = data_max + margin;
+
+    // Apply smoothing
+    let smoothing = smoothing.clamp(0.0, 1.0);
+    if current_max <= current_min {
+        // First time, use target values directly
+        (target_min, target_max)
+    } else {
+        // Smooth transition from current to target
+        let new_min = current_min + (target_min - current_min) * (1.0 - smoothing);
+        let new_max = current_max + (target_max - current_max) * (1.0 - smoothing);
+        (new_min, new_max)
     }
 }
 
-impl BarScaleState {
-    /// Create a new scale state with specified history size
-    pub fn new(max_samples: usize) -> Self {
-        Self {
-            max_samples,
-            ..Default::default()
-        }
+/// Calculate range based on percentiles of recent data
+fn calculate_percentile_range(
+    history: &VecDeque<f32>,
+    lower_percentile: f32,
+    upper_percentile: f32,
+    sample_count: usize,
+    fallback_min: f32,
+    fallback_max: f32,
+) -> (f32, f32) {
+    let samples_to_use = sample_count.min(history.len());
+    if samples_to_use < 2 {
+        return (fallback_min, fallback_max);
     }
 
-    /// Add a new sample to the history
-    pub fn add_sample(&mut self, value: f32) {
-        if !value.is_finite() {
-            return;
-        }
+    // Get most recent samples
+    let mut recent_values: Vec<f32> = history.iter().rev().take(samples_to_use).copied().collect();
 
-        self.history.push_back(value);
+    recent_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Keep only the most recent samples
-        while self.history.len() > self.max_samples {
-            self.history.pop_front();
-        }
-    }
+    let lower_idx = ((lower_percentile / 100.0) * (recent_values.len() - 1) as f32) as usize;
+    let upper_idx = ((upper_percentile / 100.0) * (recent_values.len() - 1) as f32) as usize;
 
-    /// Calculate the range based on the configured scale mode
-    pub fn calculate_range(
-        &mut self,
-        mode: &BarScaleMode,
-        fallback_min: f32,
-        fallback_max: f32,
-        min_limit: Option<f32>,
-        max_limit: Option<f32>,
-    ) -> (f32, f32) {
-        let (target_min, target_max) = match mode {
-            BarScaleMode::Fixed => (fallback_min, fallback_max),
-            BarScaleMode::Auto {
-                smoothing,
-                min_span,
-                margin_frac,
-            } => self.calculate_auto_range(
-                *smoothing,
-                *min_span,
-                *margin_frac,
-                fallback_min,
-                fallback_max,
-            ),
-            BarScaleMode::Percentile {
-                lower,
-                upper,
-                sample_count,
-            } => self.calculate_percentile_range(
-                *lower,
-                *upper,
-                *sample_count,
-                fallback_min,
-                fallback_max,
-            ),
-        };
+    let p_min = recent_values[lower_idx.min(recent_values.len() - 1)];
+    let p_max = recent_values[upper_idx.min(recent_values.len() - 1)];
 
-        // Apply hard limits if specified
-        let final_min = match min_limit {
-            Some(limit) => target_min.max(limit),
-            None => target_min,
-        };
-        let final_max = match max_limit {
-            Some(limit) => target_max.min(limit),
-            None => target_max,
-        };
-
-        // Ensure valid range, but respect hard limits
-        let final_max = if final_max < final_min {
-            // If limits conflict, adjust final_min down to final_max
-            self.current_min = final_max - 1e-6;
-            final_max
-        } else {
-            final_max.max(final_min + 1e-6)
-        };
-        let final_min = if final_max < final_min {
-            final_max - 1e-6
-        } else {
-            final_min
-        };
-
-        self.current_min = final_min;
-        self.current_max = final_max;
-
-        (final_min, final_max)
-    }
-
-    /// Calculate automatic range based on data statistics
-    fn calculate_auto_range(
-        &self,
-        smoothing: f32,
-        min_span: f32,
-        margin_frac: f32,
-        fallback_min: f32,
-        fallback_max: f32,
-    ) -> (f32, f32) {
-        if self.history.is_empty() {
-            return (fallback_min, fallback_max);
-        }
-
-        // Calculate data range
-        let mut data_min = f32::INFINITY;
-        let mut data_max = f32::NEG_INFINITY;
-
-        for &value in &self.history {
-            data_min = data_min.min(value);
-            data_max = data_max.max(value);
-        }
-
-        if !data_min.is_finite() || !data_max.is_finite() {
-            return (fallback_min, fallback_max);
-        }
-
-        // Ensure minimum span
-        let span = (data_max - data_min).max(min_span.max(1e-3));
-        if data_max - data_min < span {
-            let mid = 0.5 * (data_max + data_min);
-            data_min = mid - 0.5 * span;
-            data_max = mid + 0.5 * span;
-        }
-
-        // Add margins
-        let margin = span * margin_frac.clamp(0.0, 0.45);
-        let target_min = data_min - margin;
-        let target_max = data_max + margin;
-
-        // Apply smoothing
-        let smoothing = smoothing.clamp(0.0, 1.0);
-        if self.current_max <= self.current_min {
-            // First time, use target values directly
-            (target_min, target_max)
-        } else {
-            // Smooth transition from current to target
-            let new_min = self.current_min + (target_min - self.current_min) * (1.0 - smoothing);
-            let new_max = self.current_max + (target_max - self.current_max) * (1.0 - smoothing);
-            (new_min, new_max)
-        }
-    }
-
-    /// Calculate range based on percentiles of recent data
-    fn calculate_percentile_range(
-        &self,
-        lower_percentile: f32,
-        upper_percentile: f32,
-        sample_count: usize,
-        fallback_min: f32,
-        fallback_max: f32,
-    ) -> (f32, f32) {
-        let samples_to_use = sample_count.min(self.history.len());
-        if samples_to_use < 2 {
-            return (fallback_min, fallback_max);
-        }
-
-        // Get most recent samples
-        let mut recent_values: Vec<f32> = self
-            .history
-            .iter()
-            .rev()
-            .take(samples_to_use)
-            .copied()
-            .collect();
-
-        recent_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-        let lower_idx = ((lower_percentile / 100.0) * (recent_values.len() - 1) as f32) as usize;
-        let upper_idx = ((upper_percentile / 100.0) * (recent_values.len() - 1) as f32) as usize;
-
-        let p_min = recent_values[lower_idx.min(recent_values.len() - 1)];
-        let p_max = recent_values[upper_idx.min(recent_values.len() - 1)];
-
-        (p_min, p_max.max(p_min + 1e-6))
-    }
-
-    /// Get the current normalization range
-    pub fn get_current_range(&self) -> (f32, f32) {
-        (self.current_min, self.current_max)
-    }
-
-    /// Normalize a value using the current range
-    pub fn normalize_value(&self, value: f32) -> f32 {
-        if self.current_max <= self.current_min {
-            return 0.0;
-        }
-
-        ((value - self.current_min) / (self.current_max - self.current_min)).clamp(0.0, 1.0)
-    }
-
-    /// Clear the history (useful when switching modes)
-    pub fn clear_history(&mut self) {
-        self.history.clear();
-        self.current_min = 0.0;
-        self.current_max = 1.0;
-    }
-
-    /// Get the number of samples in history
-    pub fn sample_count(&self) -> usize {
-        self.history.len()
-    }
-
-    /// Check if we have enough samples for reliable range calculation
-    pub fn has_sufficient_data(&self, min_required: usize) -> bool {
-        self.history.len() >= min_required
-    }
+    (p_min, p_max.max(p_min + 1e-6))
 }
 
 #[cfg(test)]
@@ -243,10 +165,17 @@ mod tests {
 
     #[test]
     fn test_fixed_mode() {
-        let mut state = BarScaleState::default();
-        state.add_sample(50.0);
-
-        let (min, max) = state.calculate_range(&BarScaleMode::Fixed, 0.0, 100.0, None, None);
+        let history = VecDeque::new();
+        let (min, max) = calculate_range(
+            &history,
+            0.0,
+            1.0,
+            &BarScaleMode::Fixed,
+            0.0,
+            100.0,
+            None,
+            None,
+        );
 
         assert_eq!(min, 0.0);
         assert_eq!(max, 100.0);
@@ -254,12 +183,15 @@ mod tests {
 
     #[test]
     fn test_auto_mode() {
-        let mut state = BarScaleState::default();
+        let mut history = VecDeque::new();
         for value in [10.0, 20.0, 30.0, 40.0, 50.0] {
-            state.add_sample(value);
+            history.push_back(value);
         }
 
-        let (min, max) = state.calculate_range(
+        let (min, max) = calculate_range(
+            &history,
+            0.0,
+            1.0,
             &BarScaleMode::Auto {
                 smoothing: 0.0,
                 min_span: 1.0,
@@ -280,12 +212,15 @@ mod tests {
 
     #[test]
     fn test_percentile_mode() {
-        let mut state = BarScaleState::default();
+        let mut history = VecDeque::new();
         for value in [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 100.0] {
-            state.add_sample(value);
+            history.push_back(value);
         }
 
-        let (min, max) = state.calculate_range(
+        let (min, max) = calculate_range(
+            &history,
+            0.0,
+            1.0,
             &BarScaleMode::Percentile {
                 lower: 10.0, // P10
                 upper: 90.0, // P90
@@ -304,6 +239,7 @@ mod tests {
 
     #[test]
     fn test_limits() {
+        use crate::BarScaleState; // Use the actual implementation
         let mut state = BarScaleState::default();
         state.add_sample(200.0);
 

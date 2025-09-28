@@ -22,10 +22,7 @@ use crate::{
     constants::*,
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
-    resources::{
-        BarScaleStates, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles,
-        SampledValues,
-    },
+    GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues,
 };
 
 /// Startup system that creates all HUD UI entities and materials.
@@ -48,13 +45,20 @@ pub fn setup_hud(
 
     // Root UI node
     let root = commands
-        .spawn((Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(s.origin.y),
-            left: Val::Px(s.origin.x),
-            flex_direction: FlexDirection::Column,
-            ..default()
-        },))
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(s.origin.y),
+                left: Val::Px(s.origin.x),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            HudHandles::default(),
+            SampledValues::default(),
+            HistoryBuffers::default(),
+            GraphScaleState::default(),
+            crate::BarScaleStates::default(),
+        ))
         .id();
     commands.entity(root).insert(if s.enabled {
         Visibility::Visible
@@ -140,7 +144,7 @@ pub fn setup_hud(
                 ))
                 .id();
             commands.entity(eid).insert(ChildOf(label_container));
-            graph_labels.push(GraphLabelHandle {
+            graph_labels.push(crate::GraphLabelHandle {
                 metric_id: curve.metric.id.clone(),
                 entity: eid,
             });
@@ -288,8 +292,8 @@ pub fn setup_hud(
         }
     }
 
-    // Store handles
-    commands.insert_resource(HudHandles {
+    // Update the HudHandles component on the root entity
+    commands.entity(root).insert(HudHandles {
         root: Some(root),
         graph_row: graph_row_opt,
         graph_entity: graph_entity_opt,
@@ -308,7 +312,7 @@ pub fn setup_hud(
 pub fn sample_diagnostics(
     diagnostics: Option<Res<DiagnosticsStore>>,
     settings: Option<Res<PerfHudSettings>>,
-    mut samples: ResMut<SampledValues>,
+    mut sampled_values_query: Query<&mut SampledValues>,
     mut providers: ResMut<MetricProviders>,
 ) {
     let Some(s) = settings else {
@@ -317,6 +321,10 @@ pub fn sample_diagnostics(
     if !s.enabled {
         return;
     }
+
+    let Ok(mut samples) = sampled_values_query.single_mut() else {
+        return;
+    };
 
     let ctx = MetricSampleContext {
         diagnostics: diagnostics.as_deref(),
@@ -334,11 +342,13 @@ pub fn sample_diagnostics(
 #[allow(clippy::too_many_arguments)]
 pub fn update_graph_and_bars(
     settings: Option<Res<PerfHudSettings>>,
-    handles: Option<Res<HudHandles>>,
-    samples: Res<SampledValues>,
-    mut history: ResMut<HistoryBuffers>,
-    mut scale_state: ResMut<GraphScaleState>,
-    mut bar_scale_states: ResMut<BarScaleStates>,
+    mut hud_query: Query<(
+        &mut HudHandles,
+        &mut SampledValues,
+        &mut HistoryBuffers,
+        &mut GraphScaleState,
+        &mut crate::BarScaleStates,
+    )>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     _label_node_q: Query<&mut Node>,
@@ -350,8 +360,11 @@ pub fn update_graph_and_bars(
     };
     if !s.enabled {
         return;
-    }
-    let Some(h) = handles else {
+    };
+
+    let Ok((mut h, samples, mut history, mut scale_state, mut bar_scale_states)) =
+        hud_query.single_mut()
+    else {
         return;
     };
 
@@ -684,13 +697,14 @@ pub fn update_graph_and_bars(
 /// container, graph row and bars section without requiring entity rebuild.
 pub fn sync_hud_visibility(
     settings: Option<Res<PerfHudSettings>>,
-    handles: Option<Res<HudHandles>>,
+    hud_query: Query<&HudHandles>,
     mut commands: Commands,
 ) {
     let Some(settings) = settings else {
         return;
     };
-    let Some(handles) = handles else {
+
+    let Ok(handles) = hud_query.single() else {
         return;
     };
 

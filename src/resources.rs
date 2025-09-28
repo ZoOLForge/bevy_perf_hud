@@ -1,12 +1,15 @@
 //! Runtime resources for the bevy_perf_hud.
 //!
 //! This module contains all runtime state resources used by the HUD systems.
+//!
+//! DEPRECATED: These are now components and should be placed on entities instead.
 
 use bevy::{asset::Handle, ecs::entity::Entity, prelude::Resource};
 use std::collections::HashMap;
 
-use crate::{BarMaterial, BarScaleState, MultiLineGraphMaterial, MAX_CURVES, MAX_SAMPLES};
+use crate::{BarMaterial, MultiLineGraphMaterial, MAX_CURVES, MAX_SAMPLES};
 
+/// This module is deprecated - resources moved to components
 /// Handle to a graph label entity, linking it to its metric.
 ///
 /// Used internally to update label text and colors for graph metrics.
@@ -18,6 +21,7 @@ pub struct GraphLabelHandle {
     pub entity: Entity,
 }
 
+/// This module is deprecated - resources moved to components
 /// Resource containing handles to all HUD-related entities and materials.
 ///
 /// This resource is created automatically by the plugin and contains references
@@ -47,6 +51,7 @@ pub struct HudHandles {
     pub bar_labels: Vec<Entity>,
 }
 
+/// This module is deprecated - resources moved to components
 /// Resource storing the most recent sampled values for all performance metrics.
 ///
 /// This acts as a cache of current metric values, updated each frame by the
@@ -83,6 +88,7 @@ impl SampledValues {
     }
 }
 
+/// This module is deprecated - resources moved to components
 /// Resource storing historical values for graph curve rendering.
 ///
 /// Maintains a sliding window of historical values for each curve, used by
@@ -90,7 +96,7 @@ impl SampledValues {
 /// circular buffer format for efficient memory usage.
 #[derive(Resource)]
 pub struct HistoryBuffers {
-    /// 2D array: \[curve_index\]\[sample_index\] containing historical values
+    /// 2D array: [curve_index][sample_index] containing historical values
     /// Each curve can store up to MAX_SAMPLES historical data points
     pub values: [[f32; MAX_SAMPLES]; MAX_CURVES],
     /// Number of valid samples currently stored (0 to MAX_SAMPLES)
@@ -106,6 +112,7 @@ impl Default for HistoryBuffers {
     }
 }
 
+/// This module is deprecated - resources moved to components
 /// Resource storing the current smoothed Y-axis scale for graphs.
 ///
 /// When autoscaling is enabled, this maintains smoothed min/max values
@@ -119,6 +126,7 @@ pub struct GraphScaleState {
     pub max_y: f32,
 }
 
+/// This module is deprecated - resources moved to components
 /// Resource storing dynamic scaling states for all performance bars.
 ///
 /// Each bar can have its own dynamic scaling behavior based on its configured
@@ -127,17 +135,17 @@ pub struct GraphScaleState {
 #[derive(Resource, Default)]
 pub struct BarScaleStates {
     /// Map from metric ID to its scaling state
-    states: HashMap<String, BarScaleState>,
+    states: HashMap<String, crate::BarScaleState>,
 }
 
 impl BarScaleStates {
     /// Get mutable reference to a bar's scale state, creating it if needed
-    pub fn get_or_create(&mut self, metric_id: &str) -> &mut BarScaleState {
+    pub fn get_or_create(&mut self, metric_id: &str) -> &mut crate::BarScaleState {
         self.states.entry(metric_id.to_owned()).or_default()
     }
 
     /// Get reference to a bar's scale state if it exists
-    pub fn get(&self, metric_id: &str) -> Option<&BarScaleState> {
+    pub fn get(&self, metric_id: &str) -> Option<&crate::BarScaleState> {
         self.states.get(metric_id)
     }
 
@@ -147,7 +155,7 @@ impl BarScaleStates {
     }
 
     /// Remove a specific bar's scaling state
-    pub fn remove(&mut self, metric_id: &str) -> Option<BarScaleState> {
+    pub fn remove(&mut self, metric_id: &str) -> Option<crate::BarScaleState> {
         self.states.remove(metric_id)
     }
 }
