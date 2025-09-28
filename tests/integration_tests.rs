@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 use bevy::render::settings::RenderCreation;
-use bevy_perf_hud::{BevyPerfHudPlugin, HudOrigin};
+use bevy_perf_hud::BevyPerfHudPlugin;
 
 fn app_with_headless_rendering() -> App {
     let mut app = App::new();
@@ -38,15 +38,7 @@ fn plugin_can_be_added_to_app() {
         .contains_resource::<bevy_perf_hud::MetricProviders>());
 }
 
-#[test]
-fn hud_components_can_be_used() {
-    // Simply test that components can be created and used
-    let origin = HudOrigin {
-        origin: Vec2::new(100.0, 50.0),
-    };
-    
-    assert_eq!(origin.origin, Vec2::new(100.0, 50.0));
-}
+
 
 #[test]
 fn providers_are_registered_correctly() {

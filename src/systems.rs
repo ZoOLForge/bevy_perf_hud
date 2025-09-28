@@ -18,11 +18,12 @@ use bevy::{
 };
 
 use crate::{
+    components::{BarsConfig, GraphConfig},
     constants::*,
-    components::{BarsConfig, GraphConfig, HudOrigin},
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
-    BarsHandles, GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues,
+    BarsHandles, GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles,
+    SampledValues,
 };
 
 /// Function that creates all HUD UI entities and materials.
@@ -40,19 +41,16 @@ pub fn create_hud(
         ..default()
     });
 
-    let origin_component = HudOrigin::default();
-    
     // Spawn root UI node with default settings as components
     let root = commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(origin_component.origin.y),
-                left: Val::Px(origin_component.origin.x),
+                top: Val::Px(16.0),
+                left: Val::Px(960.0),
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            origin_component,
             GraphConfig::default(),
             BarsConfig::default(),
             HudHandles::default(),
@@ -179,7 +177,9 @@ pub fn create_hud(
         let bars_root = commands
             .spawn((Node {
                 width: Val::Px(graph_config.size.x),
-                height: Val::Px((bars_config.bars.len() as f32 / column_count as f32).ceil() * 25.0),
+                height: Val::Px(
+                    (bars_config.bars.len() as f32 / column_count as f32).ceil() * 25.0,
+                ),
                 flex_direction: FlexDirection::Column,
                 margin: UiRect {
                     left: Val::Px(graph_config.label_width.max(40.0)),
@@ -190,11 +190,13 @@ pub fn create_hud(
             },))
             .id();
         commands.entity(bars_root).insert(ChildOf(root));
-        commands.entity(bars_root).insert(if !bars_config.bars.is_empty() {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        });
+        commands
+            .entity(bars_root)
+            .insert(if !bars_config.bars.is_empty() {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            });
         bars_root_opt = Some(bars_root);
 
         for chunk in bars_config.bars.chunks(column_count) {
@@ -322,19 +324,16 @@ pub fn create_graph_hud(
         ..default()
     });
 
-    let origin_component = HudOrigin::default();
-
     // Spawn root UI node with default settings as components
     let root = commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(origin_component.origin.y),
-                left: Val::Px(origin_component.origin.x),
+                top: Val::Px(16.0),
+                left: Val::Px(960.0),
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            origin_component,
             GraphConfig::default(),
             GraphHandles::default(),
             SampledValues::default(),
@@ -460,180 +459,6 @@ pub fn create_graph_hud(
     root
 }
 
-/// Function that creates only the bars UI entities and materials.
-/// This function allows for creating the performance bars independently of graph.
-pub fn create_bars_hud(
-    mut commands: Commands,
-    mut bar_mats: ResMut<Assets<BarMaterial>>,
-) -> Entity {
-    // UI 2D camera: render after 3D to avoid conflicts
-    let ui_cam = commands.spawn(Camera2d).id();
-    commands.entity(ui_cam).insert(Camera {
-        order: 1,
-        ..default()
-    });
-
-    let origin_component = HudOrigin::default();
-
-    // Spawn root UI node with default settings as components
-    let root = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(origin_component.origin.y),
-                left: Val::Px(origin_component.origin.x),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            origin_component,
-            BarsConfig::default(),
-            BarsHandles::default(),
-            SampledValues::default(),
-            crate::BarScaleStates::default(),
-        ))
-        .id();
-    commands.entity(root).insert(Visibility::Visible);
-
-    // Get the bars configuration from the default
-    let bars_config = BarsConfig::default();
-
-    // Bars container
-    let mut bars_root_opt: Option<Entity> = None;
-    let mut bar_entities = Vec::new();
-    let mut bar_materials = Vec::new();
-    let mut bar_labels = Vec::new();
-
-    if !bars_config.bars.is_empty() {
-        let column_count = 2;
-        let default_width = 300.0; // Use a default width for bars-only layout
-        let column_width = (default_width - 12.0) / column_count as f32;
-
-        let bars_root = commands
-            .spawn((Node {
-                width: Val::Px(default_width),
-                height: Val::Px((bars_config.bars.len() as f32 / column_count as f32).ceil() * 25.0),
-                flex_direction: FlexDirection::Column,
-                margin: UiRect {
-                    left: Val::Px(0.0), // No left margin for bars-only layout
-                    top: Val::Px(4.0),
-                    ..default()
-                },
-                ..default()
-            },))
-            .id();
-        commands.entity(bars_root).insert(ChildOf(root));
-        commands.entity(bars_root).insert(if !bars_config.bars.is_empty() {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        });
-        bars_root_opt = Some(bars_root);
-
-        for chunk in bars_config.bars.chunks(column_count) {
-            let row = commands
-                .spawn((Node {
-                    width: Val::Px(default_width),
-                    height: Val::Px(24.0),
-                    flex_direction: FlexDirection::Row,
-                    margin: UiRect {
-                        top: Val::Px(1.0),
-                        ..default()
-                    },
-                    ..default()
-                },))
-                .id();
-            commands.entity(row).insert(ChildOf(bars_root));
-
-            for (col_idx, bar_cfg) in chunk.iter().enumerate() {
-                let base_label = bar_cfg
-                    .metric
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| bar_cfg.metric.id.clone());
-
-                let column = commands
-                    .spawn((Node {
-                        width: Val::Px(column_width),
-                        height: Val::Px(24.0),
-                        margin: UiRect {
-                            right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
-                                Val::Px(0.0)
-                            } else {
-                                Val::Px(8.0)
-                            },
-                            ..default()
-                        },
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },))
-                    .id();
-                commands.entity(column).insert(ChildOf(row));
-
-                let mat = bar_mats.add(BarMaterial {
-                    params: BarParams {
-                        value: 0.0,
-                        r: bar_cfg.metric.color.to_linear().to_vec4().x,
-                        g: bar_cfg.metric.color.to_linear().to_vec4().y,
-                        b: bar_cfg.metric.color.to_linear().to_vec4().z,
-                        a: bar_cfg.metric.color.to_linear().to_vec4().w,
-                        bg_r: bars_config.bg_color.to_linear().to_vec4().x,
-                        bg_g: bars_config.bg_color.to_linear().to_vec4().y,
-                        bg_b: bars_config.bg_color.to_linear().to_vec4().z,
-                        bg_a: bars_config.bg_color.to_linear().to_vec4().w,
-                    },
-                });
-
-                let bar_entity = commands
-                    .spawn((
-                        MaterialNode(mat.clone()),
-                        Node {
-                            width: Val::Px(column_width),
-                            height: Val::Px(20.0),
-                            ..default()
-                        },
-                    ))
-                    .id();
-                commands.entity(bar_entity).insert(ChildOf(column));
-
-                let bar_label = commands
-                    .spawn((
-                        Text::new(base_label),
-                        TextColor(Color::WHITE),
-                        TextFont {
-                            font_size: 10.0,
-                            ..default()
-                        },
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: Val::Px(6.0),
-                            top: Val::Px(5.0),
-                            width: Val::Px(column_width - 12.0),
-                            overflow: Overflow::hidden(),
-                            ..default()
-                        },
-                    ))
-                    .id();
-                commands.entity(bar_label).insert(ChildOf(bar_entity));
-
-                bar_entities.push(bar_entity);
-                bar_materials.push(mat);
-                bar_labels.push(bar_label);
-            }
-        }
-    }
-
-    // Update the BarsHandles component on the root entity
-    commands.entity(root).insert(BarsHandles {
-        root: Some(root),
-        bars_root: bars_root_opt,
-        bar_entities,
-        bar_materials,
-        bar_labels,
-    });
-
-    root
-}
-
 /// System that samples all registered metric providers and updates current values.
 /// This system now runs unconditionally to collect metric data.
 pub fn sample_diagnostics(
@@ -661,7 +486,6 @@ pub fn sample_diagnostics(
 #[allow(clippy::too_many_arguments)]
 pub fn update_graph_and_bars(
     mut hud_query: Query<(
-        &HudOrigin,
         &GraphConfig,
         &BarsConfig,
         &mut HudHandles,
@@ -676,8 +500,15 @@ pub fn update_graph_and_bars(
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
 ) {
-    let Ok((_, graph_config, bars_config, h, samples, mut history, mut scale_state, mut bar_scale_states)) =
-        hud_query.single_mut()
+    let Ok((
+        graph_config,
+        bars_config,
+        h,
+        samples,
+        mut history,
+        mut scale_state,
+        mut bar_scale_states,
+    )) = hud_query.single_mut()
     else {
         return;
     };
@@ -763,7 +594,10 @@ pub fn update_graph_and_bars(
 
         for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
             // Only include curves that want autoscaling in the calculation
-            if cfg.autoscale.unwrap_or(graph_config.curve_defaults.autoscale) {
+            if cfg
+                .autoscale
+                .unwrap_or(graph_config.curve_defaults.autoscale)
+            {
                 for k in 0..len {
                     mn = mn.min(history.values[i][k]);
                     mx = mx.max(history.values[i][k]);
@@ -1009,7 +843,6 @@ pub fn update_graph_and_bars(
 #[allow(clippy::too_many_arguments)]
 pub fn update_graph(
     mut graph_query: Query<(
-        &HudOrigin,
         &GraphConfig,
         &mut GraphHandles,
         &mut SampledValues,
@@ -1020,7 +853,7 @@ pub fn update_graph(
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
 ) {
-    for (_, graph_config, h, samples, mut history, mut scale_state) in graph_query.iter_mut() {
+    for (graph_config, h, samples, mut history, mut scale_state) in graph_query.iter_mut() {
         let curve_count = graph_config.curves.len().min(MAX_CURVES);
 
         // Process raw metric values through smoothing and quantization pipeline
@@ -1099,7 +932,10 @@ pub fn update_graph(
 
             for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
                 // Only include curves that want autoscaling in the calculation
-                if cfg.autoscale.unwrap_or(graph_config.curve_defaults.autoscale) {
+                if cfg
+                    .autoscale
+                    .unwrap_or(graph_config.curve_defaults.autoscale)
+                {
                     for k in 0..len {
                         mn = mn.min(history.values[i][k]);
                         mx = mx.max(history.values[i][k]);
@@ -1354,16 +1190,6 @@ pub fn update_bars(
                 }
             }
         }
-    }
-}
-
-/// System that updates the HUD position based on the HudOrigin component
-pub fn update_hud_position(
-    mut hud_query: Query<(&HudOrigin, &mut Node), Changed<HudOrigin>>,
-) {
-    for (origin, mut node) in hud_query.iter_mut() {
-        node.left = Val::Px(origin.origin.x);
-        node.top = Val::Px(origin.origin.y);
     }
 }
 

@@ -14,12 +14,10 @@ mod providers;
 mod render;
 mod systems;
 
-pub use bar_scale::*;
+
 pub use components::*;
 pub use constants::*;
-
 pub use plugin::BevyPerfHudPlugin;
 pub use providers::*;
 pub use render::*;
 pub use systems::*;
-

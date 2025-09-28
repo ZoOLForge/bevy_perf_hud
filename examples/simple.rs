@@ -2,7 +2,7 @@ use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
 use bevy_perf_hud::{
     create_hud, BarsConfig, BevyPerfHudPlugin, HudHandles, 
-    HudOrigin, BarConfig, BarScaleMode, MetricDefinition
+    BarConfig, BarScaleMode, MetricDefinition
 };
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
@@ -306,9 +306,9 @@ fn toggle_hud_mode_on_f1(
 }
 
 fn apply_custom_hud_settings(
-    mut hud_query: Query<(&mut BarsConfig, &mut HudOrigin), With<HudHandles>>, // Get the HUD components
+    mut hud_query: Query<(&mut BarsConfig,), With<HudHandles>>, // Get the HUD components
 ) {
-    let Ok((mut bars_config, mut origin)) = hud_query.single_mut() else {
+    let Ok((mut bars_config,)) = hud_query.single_mut() else {
         return;
     };
 
@@ -351,9 +351,6 @@ fn apply_custom_hud_settings(
             max_limit: Some(300.0), // Cap at reasonable maximum
         },
     );
-
-    // Update the origin
-    origin.origin = Vec2::new(960.0, 16.0);
 }
 
 fn main() {

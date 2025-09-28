@@ -727,21 +727,6 @@ impl Default for BarsSettings {
 // Component Types (formerly from hud_settings_components.rs)
 // ============================================================================
 
-/// Component storing the screen position where the HUD should be anchored.
-#[derive(Component, Debug, Clone)]
-pub struct HudOrigin {
-    /// Screen position (in pixels) where the HUD should be anchored
-    pub origin: Vec2,
-}
-
-impl Default for HudOrigin {
-    fn default() -> Self {
-        Self {
-            origin: Vec2::new(960.0, 16.0),
-        }
-    }
-}
-
 /// Component storing configuration for the performance graph display.
 #[derive(Component, Debug, Clone)]
 pub struct GraphConfig {
