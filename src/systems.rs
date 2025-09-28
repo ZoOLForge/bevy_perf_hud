@@ -305,7 +305,6 @@ pub fn create_hud(
         graph_labels,
         graph_label_width: graph_config.label_width.max(40.0),
         bars_root: bars_root_opt,
-        bar_entities,
         bar_materials,
         bar_labels,
     });

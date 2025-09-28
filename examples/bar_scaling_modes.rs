@@ -177,9 +177,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
 
     // Update the BarsHandles component on the root entity
     commands.entity(root).insert(BarsHandles {
-        root: Some(root),
         bars_root: bars_root_opt,
-        bar_entities,
         bar_materials,
         bar_labels,
     });

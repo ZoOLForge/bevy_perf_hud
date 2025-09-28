@@ -40,8 +40,6 @@ pub struct HudHandles {
     pub graph_label_width: f32,
     /// Entity for the bars container
     pub bars_root: Option<Entity>,
-    /// Entities for individual bar graphics
-    pub bar_entities: Vec<Entity>,
     /// Material handles for bar shaders
     pub bar_materials: Vec<Handle<BarMaterial>>,
     /// Entities for bar label text
@@ -76,12 +74,8 @@ pub struct GraphHandles {
 /// Used internally by the bars update system.
 #[derive(Component, Default)]
 pub struct BarsHandles {
-    /// Root entity for the bars UI hierarchy
-    pub root: Option<Entity>,
     /// Entity for the bars container
     pub bars_root: Option<Entity>,
-    /// Entities for individual bar graphics
-    pub bar_entities: Vec<Entity>,
     /// Material handles for bar shaders
     pub bar_materials: Vec<Handle<BarMaterial>>,
     /// Entities for bar label text
