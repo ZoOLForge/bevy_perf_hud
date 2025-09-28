@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    BarConfig, BarScaleMode, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfMetricProvider, create_hud, BarsConfig, GraphConfig
+    create_bars_hud, BarConfig, BarMaterial, BarScaleMode, BarsConfig, BevyPerfHudPlugin,
+    MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider,
 };
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
@@ -10,8 +10,8 @@ fn main() {
         .insert_resource(ClearColor(Color::srgba(0.02, 0.02, 0.05, 1.0)))
         .add_plugins(DefaultPlugins)
         .add_plugins(BevyPerfHudPlugin)
-        .add_systems(Startup, create_hud) // Create HUD layout
-        .add_systems(Startup, apply_scaling_demo_config.after(create_hud)) // Apply custom configurations
+        .add_systems(Startup, setup_bars_hud) // Create bars-only HUD layout
+        .add_systems(Startup, apply_scaling_demo_config.after(setup_bars_hud))
         .add_perf_metric_provider(VariableMetric::new("variable/cpu_load", 0.0, 100.0))
         .add_perf_metric_provider(VariableMetric::new("variable/memory_usage", 100.0, 2000.0))
         .add_perf_metric_provider(SpikyMetric::new("spiky/latency", 10.0, 500.0))
@@ -19,11 +19,17 @@ fn main() {
         .run();
 }
 
-/// Creates custom HUD configuration demonstrating different bar scaling modes
-fn apply_scaling_demo_config(
-    mut hud_query: Query<(&mut GraphConfig, &mut BarsConfig)>,
+/// System wrapper to create bars-only HUD
+fn setup_bars_hud(
+    commands: Commands,
+    bar_mats: ResMut<Assets<BarMaterial>>,
 ) {
-    let Ok((mut graph_config, mut bars_config)) = hud_query.single_mut() else {
+    create_bars_hud(commands, bar_mats);
+}
+
+/// Creates custom bars configuration demonstrating different bar scaling modes
+fn apply_scaling_demo_config(mut bars_query: Query<&mut BarsConfig>) {
+    let Ok(mut bars_config) = bars_query.single_mut() else {
         return;
     };
 
@@ -51,10 +57,7 @@ fn apply_scaling_demo_config(
         color: Color::srgb(0.3, 0.3, 1.0),
     };
 
-    // Disable default graph for this demo
-    graph_config.enabled = false;
-    // Widen the bar columns a bit to keep long labels on a single line
-    graph_config.size.x = 360.0;
+    // No graph configuration needed - this example only shows bars
 
     // Configure bars with different scaling modes
     bars_config.bars = vec![
@@ -102,12 +105,12 @@ fn apply_scaling_demo_config(
 /// Simulates keyboard input for controlling the demo
 fn simulate_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut graph_config_query: Query<&mut GraphConfig>,
+    mut bars_config_query: Query<&mut BarsConfig>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        if let Ok(mut graph_config) = graph_config_query.single_mut() {
-            // Toggle graph visibility instead since global enabled flag was removed
-            graph_config.enabled = !graph_config.enabled;
+        if let Ok(mut bars_config) = bars_config_query.single_mut() {
+            // Toggle bars visibility
+            bars_config.enabled = !bars_config.enabled;
         }
     }
 }

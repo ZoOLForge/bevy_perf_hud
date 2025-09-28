@@ -13,7 +13,7 @@ use bevy::{
 };
 
 use crate::{
-    sample_diagnostics, update_graph_and_bars, update_hud_position, BarMaterial,
+    sample_diagnostics, update_bars, update_graph, update_graph_and_bars, update_hud_position, BarMaterial,
     MetricProviders, MultiLineGraphMaterial,
 };
 
@@ -62,7 +62,11 @@ impl Plugin for BevyPerfHudPlugin {
             .add_systems(
                 Update,
                 (
+                    // Original combined system for backward compatibility
                     (sample_diagnostics, update_graph_and_bars).chain(),
+                    // New separate systems for independent usage
+                    (sample_diagnostics, update_graph).chain(),
+                    (sample_diagnostics, update_bars).chain(),
                 ),
             ) // Update loop
             .add_systems(Update, update_hud_position); // Add system to update HUD position based on component

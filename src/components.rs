@@ -48,6 +48,46 @@ pub struct HudHandles {
     pub bar_labels: Vec<Entity>,
 }
 
+/// Component containing handles to graph-related entities and materials.
+///
+/// This component is placed on graph entities and contains references
+/// to all the UI entities and materials that make up the performance graph.
+/// Used internally by the graph update system.
+#[derive(Component, Default)]
+pub struct GraphHandles {
+    /// Root entity for the graph UI hierarchy
+    pub root: Option<Entity>,
+    /// Entity for the graph row container (contains labels + graph)
+    pub graph_row: Option<Entity>,
+    /// Entity for the actual graph rendering area
+    pub graph_entity: Option<Entity>,
+    /// Material handle for the graph shader
+    pub graph_material: Option<Handle<MultiLineGraphMaterial>>,
+    /// Handles to all graph label entities
+    pub graph_labels: Vec<GraphLabelHandle>,
+    /// Width allocated for graph labels in pixels
+    pub graph_label_width: f32,
+}
+
+/// Component containing handles to bars-related entities and materials.
+///
+/// This component is placed on bars entities and contains references
+/// to all the UI entities and materials that make up the performance bars.
+/// Used internally by the bars update system.
+#[derive(Component, Default)]
+pub struct BarsHandles {
+    /// Root entity for the bars UI hierarchy
+    pub root: Option<Entity>,
+    /// Entity for the bars container
+    pub bars_root: Option<Entity>,
+    /// Entities for individual bar graphics
+    pub bar_entities: Vec<Entity>,
+    /// Material handles for bar shaders
+    pub bar_materials: Vec<Handle<BarMaterial>>,
+    /// Entities for bar label text
+    pub bar_labels: Vec<Entity>,
+}
+
 /// Component storing the most recent sampled values for all performance metrics.
 ///
 /// This acts as a cache of current metric values, updated each frame by the

@@ -26,3 +26,6 @@ pub use plugin::BevyPerfHudPlugin;
 pub use providers::*;
 pub use render::*;
 pub use systems::*;
+
+// Re-export new component types
+pub use components::{BarsHandles, GraphHandles};
