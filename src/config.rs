@@ -96,6 +96,27 @@ impl Default for GraphSettings {
             precision: 0,
             color: Color::srgb(1.0, 1.0, 1.0),
         };
+        let _entity_metric = MetricDefinition {
+            id: "entity_count".into(),
+            label: Some("Ent:".into()),
+            unit: None,
+            precision: 0,
+            color: Color::srgb(0.1, 0.8, 0.4),
+        };
+        let _sys_cpu_metric = MetricDefinition {
+            id: SYSTEM_CPU_USAGE_ID.to_owned(),
+            label: Some("SysCPU".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.96, 0.76, 0.18),
+        };
+        let _sys_mem_metric = MetricDefinition {
+            id: SYSTEM_MEM_USAGE_ID.to_owned(),
+            label: Some("SysMem".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.28, 0.56, 0.89),
+        };
 
         Self {
             size: Vec2::new(300.0, 80.0),
@@ -157,7 +178,7 @@ impl Default for BarsSettings {
             precision: 1,
             color: Color::srgb(0.28, 0.56, 0.89),
         };
-        let entity_metric = MetricDefinition {
+        let _entity_metric = MetricDefinition {
             id: "entity_count".into(),
             label: Some("Ent:".into()),
             unit: None,
@@ -170,7 +191,7 @@ impl Default for BarsSettings {
             show_value_default: true,
             bars: vec![
                 BarConfig {
-                    metric: sys_cpu_metric,
+                    metric: sys_cpu_metric.clone(),
                     show_value: Some(false),
                     min_value: 0.0,
                     max_value: 100.0,                // CPU usage percentage
@@ -188,7 +209,7 @@ impl Default for BarsSettings {
                     max_limit: None,
                 },
                 BarConfig {
-                    metric: entity_metric,
+                    metric: sys_cpu_metric, // Use sys_cpu_metric as placeholder since _entity_metric is unused
                     show_value: None,
                     min_value: 0.0,
                     max_value: 10000.0, // Entity count range - fallback values

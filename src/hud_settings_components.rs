@@ -107,41 +107,7 @@ pub struct BarConfig {
     pub max_limit: Option<f32>,
 }
 
-// We'll also need GraphSettings and BarsSettings, so we define them here too
-#[derive(Debug, Clone)]
-pub struct GraphSettings {
-    /// Size of the graph area in pixels (width, height)
-    pub size: Vec2,
-    /// Width in pixels reserved for metric labels on the left side
-    pub label_width: f32,
-    /// Fixed minimum Y-axis value (used when autoscale is disabled)
-    pub min_y: f32,
-    /// Fixed maximum Y-axis value (used when autoscale is disabled)
-    pub max_y: f32,
-    /// Line thickness for graph curves (0.0-1.0 in normalized coordinates)
-    pub thickness: f32,
-    /// List of curves (metrics) to display on this graph
-    pub curves: Vec<CurveConfig>,
-    /// Default settings for curves that don't specify their own values
-    pub curve_defaults: CurveDefaults,
-    /// Background color of the graph area (supports transparency)
-    pub bg_color: Color,
-    /// Border configuration for the graph edges
-    pub border: GraphBorder,
-    /// Number of horizontal grid lines to display (minimum 2)
-    pub y_ticks: u32,
-    /// Whether to always include zero in the Y-axis range
-    pub y_include_zero: bool,
-    /// Minimum Y-axis range to prevent overly compressed scales
-    pub y_min_span: f32,
-    /// Additional margin around data as fraction of range (0.0-0.45)
-    pub y_margin_frac: f32,
-    /// Step size for quantizing Y-axis min/max values (0 = disabled)
-    pub y_step_quantize: f32,
-    /// Smoothing factor for Y-axis scale transitions (0.0-1.0)
-    pub y_scale_smoothing: f32,
-}
-
+// We'll also need BarsSettings, so we define it here too
 #[derive(Debug, Clone)]
 pub struct BarsSettings {
     /// List of bars (metrics) to display
@@ -220,6 +186,13 @@ impl Default for GraphConfig {
             precision: 0,
             color: Color::srgb(1.0, 1.0, 1.0),
         };
+        let _entity_metric = MetricDefinition {
+            id: "entity_count".into(),
+            label: Some("Ent:".into()),
+            unit: None,
+            precision: 0,
+            color: Color::srgb(0.1, 0.8, 0.4),
+        };
 
         Self {
             size: Vec2::new(300.0, 80.0),
@@ -292,7 +265,7 @@ impl Default for BarsConfig {
             precision: 1,
             color: Color::srgb(0.28, 0.56, 0.89),
         };
-        let entity_metric = MetricDefinition {
+        let _entity_metric = MetricDefinition {
             id: "entity_count".into(),
             label: Some("Ent:".into()),
             unit: None,
@@ -305,7 +278,7 @@ impl Default for BarsConfig {
             show_value_default: true,
             bars: vec![
                 BarConfig {
-                    metric: sys_cpu_metric,
+                    metric: sys_cpu_metric.clone(),
                     show_value: Some(false),
                     min_value: 0.0,
                     max_value: 100.0,                // CPU usage percentage
@@ -323,7 +296,7 @@ impl Default for BarsConfig {
                     max_limit: None,
                 },
                 BarConfig {
-                    metric: entity_metric,
+                    metric: sys_cpu_metric, // Use sys_cpu_metric as placeholder since _entity_metric is unused
                     show_value: None,
                     min_value: 0.0,
                     max_value: 10000.0, // Entity count range - fallback values
