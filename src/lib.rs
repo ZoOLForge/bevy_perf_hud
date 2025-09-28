@@ -6,7 +6,7 @@
 //! - Custom metric tracking with extensible provider system
 //! - Configurable visual appearance and positioning
 
-mod bar_scale;
+
 mod components;
 mod constants;
 mod plugin;
