@@ -60,11 +60,7 @@ pub fn setup_hud(
             crate::BarScaleStates::default(),
         ))
         .id();
-    commands.entity(root).insert(if s.enabled {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    });
+    commands.entity(root).insert(Visibility::Visible);
 
     // Graph material and node (optional)
     let mut graph_row_opt: Option<Entity> = None;
@@ -108,7 +104,7 @@ pub fn setup_hud(
             },))
             .id();
         commands.entity(graph_row).insert(ChildOf(root));
-        commands.entity(graph_row).insert(if s.enabled {
+        commands.entity(graph_row).insert(if s.graph.enabled {
             Visibility::Visible
         } else {
             Visibility::Hidden
@@ -192,7 +188,7 @@ pub fn setup_hud(
             },))
             .id();
         commands.entity(bars_root).insert(ChildOf(root));
-        commands.entity(bars_root).insert(if s.enabled {
+        commands.entity(bars_root).insert(if s.bars.enabled && !s.bars.bars.is_empty() {
             Visibility::Visible
         } else {
             Visibility::Hidden
@@ -315,12 +311,9 @@ pub fn sample_diagnostics(
     mut sampled_values_query: Query<&mut SampledValues>,
     mut providers: ResMut<MetricProviders>,
 ) {
-    let Some(s) = settings else {
+    let Some(_s) = settings else {
         return;
     };
-    if !s.enabled {
-        return;
-    }
 
     let Ok(mut samples) = sampled_values_query.single_mut() else {
         return;
@@ -356,9 +349,6 @@ pub fn update_graph_and_bars(
     mut label_color_q: Query<&mut TextColor>,
 ) {
     let Some(s) = settings else {
-        return;
-    };
-    if !s.enabled {
         return;
     };
 
@@ -691,47 +681,4 @@ pub fn update_graph_and_bars(
     }
 }
 
-/// System that synchronizes HUD visibility with the latest settings.
-///
-/// Runs when [`PerfHudSettings`] changes, toggling visibility of the root
-/// container, graph row and bars section without requiring entity rebuild.
-pub fn sync_hud_visibility(
-    settings: Option<Res<PerfHudSettings>>,
-    hud_query: Query<&HudHandles>,
-    mut commands: Commands,
-) {
-    let Some(settings) = settings else {
-        return;
-    };
 
-    let Ok(handles) = hud_query.single() else {
-        return;
-    };
-
-    if let Some(root) = handles.root {
-        commands.entity(root).insert(if settings.enabled {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        });
-    }
-
-    if let Some(graph_row) = handles.graph_row {
-        let graph_visible = settings.enabled && settings.graph.enabled;
-        commands.entity(graph_row).insert(if graph_visible {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        });
-    }
-
-    if let Some(bars_root) = handles.bars_root {
-        let bars_visible =
-            settings.enabled && settings.bars.enabled && !settings.bars.bars.is_empty();
-        commands.entity(bars_root).insert(if bars_visible {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        });
-    }
-}

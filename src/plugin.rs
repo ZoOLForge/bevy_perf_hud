@@ -8,14 +8,13 @@ use bevy::{
         EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
         SystemInformationDiagnosticsPlugin,
     },
-    ecs::schedule::common_conditions::resource_changed,
     prelude::IntoScheduleConfigs,
     ui::UiMaterialPlugin,
 };
 
 use crate::{
-    sample_diagnostics, setup_hud, sync_hud_visibility, update_graph_and_bars, BarMaterial,
-    MetricProviders, MultiLineGraphMaterial, PerfHudSettings,
+    sample_diagnostics, setup_hud, update_graph_and_bars, BarMaterial,
+    MetricProviders, MultiLineGraphMaterial,
 };
 
 /// Main plugin for the Bevy Performance HUD.
@@ -64,7 +63,6 @@ impl Plugin for BevyPerfHudPlugin {
             .add_systems(
                 Update,
                 (
-                    sync_hud_visibility.run_if(resource_changed::<PerfHudSettings>),
                     (sample_diagnostics, update_graph_and_bars).chain(),
                 ),
             ); // Update loop

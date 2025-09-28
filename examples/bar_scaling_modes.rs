@@ -105,7 +105,8 @@ fn simulate_input(
     mut settings: ResMut<PerfHudSettings>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        settings.enabled = !settings.enabled;
+        // Toggle graph visibility instead since global enabled flag was removed
+        settings.graph.enabled = !settings.graph.enabled;
     }
 }
 

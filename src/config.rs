@@ -9,6 +9,7 @@ use bevy::{color::Color, math::Vec2, prelude::Resource};
 ///
 /// This resource controls all aspects of the HUD's appearance and behavior.
 /// Insert this resource into your Bevy app to customize the HUD settings.
+/// Note: The HUD is always active when the plugin is added, individual components (graph/bars) have their own enabled flags.
 ///
 /// # Example
 /// ```rust
@@ -24,8 +25,6 @@ use bevy::{color::Color, math::Vec2, prelude::Resource};
 /// ```
 #[derive(Debug, Resource)]
 pub struct PerfHudSettings {
-    /// Whether the HUD is currently enabled and visible
-    pub enabled: bool,
     /// Screen position (in pixels) where the HUD should be anchored
     pub origin: Vec2,
     /// Configuration for the performance graph display
@@ -73,7 +72,6 @@ impl Default for PerfHudSettings {
         };
 
         Self {
-            enabled: true,
             origin: Vec2::new(960.0, 16.0),
             graph: GraphSettings {
                 enabled: true,

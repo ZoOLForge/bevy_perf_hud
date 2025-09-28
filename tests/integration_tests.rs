@@ -44,7 +44,6 @@ fn plugin_works_with_custom_settings() {
 
     // Insert custom settings
     let settings = PerfHudSettings {
-        enabled: true,
         origin: Vec2::new(100.0, 50.0),
         ..default()
     };
@@ -55,7 +54,6 @@ fn plugin_works_with_custom_settings() {
     // Should not panic and settings should be preserved
     let stored_settings = app.world().resource::<PerfHudSettings>();
     assert_eq!(stored_settings.origin, Vec2::new(100.0, 50.0));
-    assert!(stored_settings.enabled);
 }
 
 #[test]
