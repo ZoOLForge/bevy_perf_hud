@@ -505,6 +505,26 @@ pub struct BarConfig {
     pub max_limit: Option<f32>,
 }
 
+impl Default for BarConfig {
+    fn default() -> Self {
+        Self {
+            metric: MetricDefinition {
+                id: "default".to_owned(),
+                label: Some("Default".to_owned()),
+                unit: Some("".to_owned()),
+                precision: 2,
+                color: Color::srgb(0.5, 0.5, 0.5),
+            },
+            show_value: None,
+            min_value: 0.0,
+            max_value: 100.0,
+            scale_mode: BarScaleMode::Fixed,
+            min_limit: None,
+            max_limit: None,
+        }
+    }
+}
+
 /// Configuration for the performance graph (chart) display.
 ///
 /// Controls how performance metrics are visualized as time-series graphs,
