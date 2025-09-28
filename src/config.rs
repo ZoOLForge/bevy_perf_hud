@@ -3,7 +3,7 @@
 //! This module contains all configuration types for customizing the performance HUD.
 
 use crate::constants::*;
-use bevy::{color::Color, math::Vec2, prelude::Resource};
+use bevy::{color::Color, math::Vec2};
 
 
 
@@ -95,27 +95,6 @@ impl Default for GraphSettings {
             unit: Some("fps".into()),
             precision: 0,
             color: Color::srgb(1.0, 1.0, 1.0),
-        };
-        let entity_metric = MetricDefinition {
-            id: "entity_count".into(),
-            label: Some("Ent:".into()),
-            unit: None,
-            precision: 0,
-            color: Color::srgb(0.1, 0.8, 0.4),
-        };
-        let sys_cpu_metric = MetricDefinition {
-            id: SYSTEM_CPU_USAGE_ID.to_owned(),
-            label: Some("SysCPU".into()),
-            unit: Some("%".into()),
-            precision: 1,
-            color: Color::srgb(0.96, 0.76, 0.18),
-        };
-        let sys_mem_metric = MetricDefinition {
-            id: SYSTEM_MEM_USAGE_ID.to_owned(),
-            label: Some("SysMem".into()),
-            unit: Some("%".into()),
-            precision: 1,
-            color: Color::srgb(0.28, 0.56, 0.89),
         };
 
         Self {

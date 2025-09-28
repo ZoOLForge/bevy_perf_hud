@@ -220,13 +220,6 @@ impl Default for GraphConfig {
             precision: 0,
             color: Color::srgb(1.0, 1.0, 1.0),
         };
-        let entity_metric = MetricDefinition {
-            id: "entity_count".into(),
-            label: Some("Ent:".into()),
-            unit: None,
-            precision: 0,
-            color: Color::srgb(0.1, 0.8, 0.4),
-        };
 
         Self {
             size: Vec2::new(300.0, 80.0),

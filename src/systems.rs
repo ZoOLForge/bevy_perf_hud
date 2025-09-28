@@ -636,7 +636,6 @@ pub fn create_bars_hud(
 
 /// System that samples all registered metric providers and updates current values.
 /// This system now runs unconditionally to collect metric data.
-
 pub fn sample_diagnostics(
     diagnostics: Option<Res<DiagnosticsStore>>,
     mut sampled_values_query: Query<&mut SampledValues>,
