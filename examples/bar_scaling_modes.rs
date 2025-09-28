@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BarConfig, BarScaleMode, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfHudSettings, PerfMetricProvider, create_hud,
+    PerfHudAppExt, PerfMetricProvider, create_hud, BarsConfig, GraphConfig
 };
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
@@ -10,8 +10,8 @@ fn main() {
         .insert_resource(ClearColor(Color::srgba(0.02, 0.02, 0.05, 1.0)))
         .add_plugins(DefaultPlugins)
         .add_plugins(BevyPerfHudPlugin)
-        .insert_resource(create_scaling_demo_settings())
         .add_systems(Startup, create_hud) // Create HUD layout
+        .add_systems(Startup, apply_scaling_demo_config.after(create_hud)) // Apply custom configurations
         .add_perf_metric_provider(VariableMetric::new("variable/cpu_load", 0.0, 100.0))
         .add_perf_metric_provider(VariableMetric::new("variable/memory_usage", 100.0, 2000.0))
         .add_perf_metric_provider(SpikyMetric::new("spiky/latency", 10.0, 500.0))
@@ -19,8 +19,14 @@ fn main() {
         .run();
 }
 
-/// Creates HUD settings demonstrating different bar scaling modes
-fn create_scaling_demo_settings() -> PerfHudSettings {
+/// Creates custom HUD configuration demonstrating different bar scaling modes
+fn apply_scaling_demo_config(
+    mut hud_query: Query<(&mut GraphConfig, &mut BarsConfig)>,
+) {
+    let Ok((mut graph_config, mut bars_config)) = hud_query.single_mut() else {
+        return;
+    };
+
     let fixed_mode_metric = MetricDefinition {
         id: "variable/cpu_load".into(),
         label: Some("CPU (Fixed 0-100%)".into()),
@@ -45,18 +51,13 @@ fn create_scaling_demo_settings() -> PerfHudSettings {
         color: Color::srgb(0.3, 0.3, 1.0),
     };
 
-    let mut settings = PerfHudSettings {
-        origin: Vec2::new(16.0, 16.0),
-        ..Default::default()
-    };
-
     // Disable default graph for this demo
-    settings.graph.enabled = false;
+    graph_config.enabled = false;
     // Widen the bar columns a bit to keep long labels on a single line
-    settings.graph.size.x = 360.0;
+    graph_config.size.x = 360.0;
 
     // Configure bars with different scaling modes
-    settings.bars.bars = vec![
+    bars_config.bars = vec![
         // Fixed mode bar - traditional static range
         BarConfig {
             metric: fixed_mode_metric,
@@ -96,18 +97,18 @@ fn create_scaling_demo_settings() -> PerfHudSettings {
             max_limit: Some(1000.0), // Hard maximum limit
         },
     ];
-
-    settings
 }
 
 /// Simulates keyboard input for controlling the demo
 fn simulate_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut settings: ResMut<PerfHudSettings>,
+    mut graph_config_query: Query<&mut GraphConfig>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        // Toggle graph visibility instead since global enabled flag was removed
-        settings.graph.enabled = !settings.graph.enabled;
+        if let Ok(mut graph_config) = graph_config_query.single_mut() {
+            // Toggle graph visibility instead since global enabled flag was removed
+            graph_config.enabled = !graph_config.enabled;
+        }
     }
 }
 

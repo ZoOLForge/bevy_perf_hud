@@ -13,7 +13,7 @@ use bevy::{
 };
 
 use crate::{
-    sample_diagnostics, update_graph_and_bars, BarMaterial,
+    sample_diagnostics, update_graph_and_bars, update_hud_position, BarMaterial,
     MetricProviders, MultiLineGraphMaterial,
 };
 
@@ -64,7 +64,8 @@ impl Plugin for BevyPerfHudPlugin {
                 (
                     (sample_diagnostics, update_graph_and_bars).chain(),
                 ),
-            ); // Update loop
+            ) // Update loop
+            .add_systems(Update, update_hud_position); // Add system to update HUD position based on component
 
         // Register default metric providers (FPS, frame time, entity count, system info)
         app.world_mut()

@@ -18,8 +18,8 @@ use bevy::{
 };
 
 use crate::{
-    config::PerfHudSettings,
     constants::*,
+    hud_settings_components::{BarsConfig, GraphConfig, HudOrigin},
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
     GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles, SampledValues,
@@ -27,16 +27,12 @@ use crate::{
 
 /// Function that creates all HUD UI entities and materials.
 /// This function is designed to be called by user code to create the HUD layout.
-
+/// The settings are now provided as components on the entity where HUD will be spawned.
 pub fn create_hud(
     mut commands: Commands,
-    settings: Option<Res<PerfHudSettings>>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
 ) {
-    let Some(s) = settings else {
-        return;
-    };
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
     commands.entity(ui_cam).insert(Camera {
@@ -44,16 +40,21 @@ pub fn create_hud(
         ..default()
     });
 
-    // Root UI node
+    let origin_component = HudOrigin::default();
+    
+    // Spawn root UI node with default settings as components
     let root = commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(s.origin.y),
-                left: Val::Px(s.origin.x),
+                top: Val::Px(origin_component.origin.y),
+                left: Val::Px(origin_component.origin.x),
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
+            origin_component,
+            GraphConfig::default(),
+            BarsConfig::default(),
             HudHandles::default(),
             SampledValues::default(),
             HistoryBuffers::default(),
@@ -63,49 +64,53 @@ pub fn create_hud(
         .id();
     commands.entity(root).insert(Visibility::Visible);
 
+    // Get the graph and bars configurations from the root entity
+    let graph_config = GraphConfig::default();
+    let bars_config = BarsConfig::default();
+
     // Graph material and node (optional)
     let mut graph_row_opt: Option<Entity> = None;
     let mut graph_entity_opt: Option<Entity> = None;
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
     let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
-    if s.graph.enabled {
+    if graph_config.enabled {
         let mut graph_params = MultiLineGraphParams::default();
         #[allow(clippy::field_reassign_with_default)]
         {
             graph_params.length = 0;
-            graph_params.min_y = s.graph.min_y;
-            graph_params.max_y = s.graph.max_y;
-            graph_params.thickness = s.graph.thickness;
-            graph_params.bg_color = s.graph.bg_color.to_linear().to_vec4();
-            graph_params.border_color = s.graph.border.color.to_linear().to_vec4();
-            graph_params.border_thickness = s.graph.border.thickness; // pixels
+            graph_params.min_y = graph_config.min_y;
+            graph_params.max_y = graph_config.max_y;
+            graph_params.thickness = graph_config.thickness;
+            graph_params.bg_color = graph_config.bg_color.to_linear().to_vec4();
+            graph_params.border_color = graph_config.border.color.to_linear().to_vec4();
+            graph_params.border_thickness = graph_config.border.thickness; // pixels
             graph_params.border_thickness_uv_x =
-                (s.graph.border.thickness / s.graph.size.x).max(0.0001);
+                (graph_config.border.thickness / graph_config.size.x).max(0.0001);
             graph_params.border_thickness_uv_y =
-                (s.graph.border.thickness / s.graph.size.y).max(0.0001);
-            graph_params.border_left = if s.graph.border.left { 1 } else { 0 };
-            graph_params.border_bottom = if s.graph.border.bottom { 1 } else { 0 };
-            graph_params.border_right = if s.graph.border.right { 1 } else { 0 };
-            graph_params.border_top = if s.graph.border.top { 1 } else { 0 };
-            graph_params.curve_count = s.graph.curves.len().min(MAX_CURVES) as u32;
+                (graph_config.border.thickness / graph_config.size.y).max(0.0001);
+            graph_params.border_left = if graph_config.border.left { 1 } else { 0 };
+            graph_params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
+            graph_params.border_right = if graph_config.border.right { 1 } else { 0 };
+            graph_params.border_top = if graph_config.border.top { 1 } else { 0 };
+            graph_params.curve_count = graph_config.curves.len().min(MAX_CURVES) as u32;
             // Write curve colors
-            for (i, c) in s.graph.curves.iter().take(MAX_CURVES).enumerate() {
+            for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
                 let v = c.metric.color.to_linear().to_vec4();
                 graph_params.colors[i] = v;
             }
         }
         // Row container: left labels + right graph
-        let label_width = s.graph.label_width.max(40.0);
+        let label_width = graph_config.label_width.max(40.0);
         let graph_row = commands
             .spawn((Node {
-                width: Val::Px(s.graph.size.x + label_width),
-                height: Val::Px(s.graph.size.y),
+                width: Val::Px(graph_config.size.x + label_width),
+                height: Val::Px(graph_config.size.y),
                 flex_direction: FlexDirection::Row,
                 ..default()
             },))
             .id();
         commands.entity(graph_row).insert(ChildOf(root));
-        commands.entity(graph_row).insert(if s.graph.enabled {
+        commands.entity(graph_row).insert(if graph_config.enabled {
             Visibility::Visible
         } else {
             Visibility::Hidden
@@ -116,7 +121,7 @@ pub fn create_hud(
         let label_container = commands
             .spawn((Node {
                 width: Val::Px(label_width),
-                height: Val::Px(s.graph.size.y),
+                height: Val::Px(graph_config.size.y),
                 flex_direction: FlexDirection::Column,
                 ..default()
             },))
@@ -124,7 +129,7 @@ pub fn create_hud(
         commands.entity(label_container).insert(ChildOf(graph_row));
 
         // Create label rows matching configured curves
-        for curve in s.graph.curves.iter().take(MAX_CURVES) {
+        for curve in graph_config.curves.iter().take(MAX_CURVES) {
             let eid = commands
                 .spawn((
                     Text::new(""),
@@ -155,8 +160,8 @@ pub fn create_hud(
             .spawn((
                 MaterialNode(gh.clone()),
                 Node {
-                    width: Val::Px(s.graph.size.x),
-                    height: Val::Px(s.graph.size.y),
+                    width: Val::Px(graph_config.size.x),
+                    height: Val::Px(graph_config.size.y),
                     ..default()
                 },
             ))
@@ -171,17 +176,17 @@ pub fn create_hud(
     let mut bar_entities = Vec::new();
     let mut bar_materials = Vec::new();
     let mut bar_labels = Vec::new();
-    if s.bars.enabled && !s.bars.bars.is_empty() {
+    if bars_config.enabled && !bars_config.bars.is_empty() {
         let column_count = 2;
-        let column_width = (s.graph.size.x - 12.0) / column_count as f32;
+        let column_width = (graph_config.size.x - 12.0) / column_count as f32;
 
         let bars_root = commands
             .spawn((Node {
-                width: Val::Px(s.graph.size.x),
-                height: Val::Px((s.bars.bars.len() as f32 / column_count as f32).ceil() * 25.0),
+                width: Val::Px(graph_config.size.x),
+                height: Val::Px((bars_config.bars.len() as f32 / column_count as f32).ceil() * 25.0),
                 flex_direction: FlexDirection::Column,
                 margin: UiRect {
-                    left: Val::Px(s.graph.label_width.max(40.0)),
+                    left: Val::Px(graph_config.label_width.max(40.0)),
                     top: Val::Px(4.0),
                     ..default()
                 },
@@ -189,17 +194,17 @@ pub fn create_hud(
             },))
             .id();
         commands.entity(bars_root).insert(ChildOf(root));
-        commands.entity(bars_root).insert(if s.bars.enabled && !s.bars.bars.is_empty() {
+        commands.entity(bars_root).insert(if bars_config.enabled && !bars_config.bars.is_empty() {
             Visibility::Visible
         } else {
             Visibility::Hidden
         });
         bars_root_opt = Some(bars_root);
 
-        for chunk in s.bars.bars.chunks(column_count) {
+        for chunk in bars_config.bars.chunks(column_count) {
             let row = commands
                 .spawn((Node {
-                    width: Val::Px(s.graph.size.x),
+                    width: Val::Px(graph_config.size.x),
                     height: Val::Px(24.0),
                     flex_direction: FlexDirection::Row,
                     margin: UiRect {
@@ -243,10 +248,10 @@ pub fn create_hud(
                         g: bar_cfg.metric.color.to_linear().to_vec4().y,
                         b: bar_cfg.metric.color.to_linear().to_vec4().z,
                         a: bar_cfg.metric.color.to_linear().to_vec4().w,
-                        bg_r: s.bars.bg_color.to_linear().to_vec4().x,
-                        bg_g: s.bars.bg_color.to_linear().to_vec4().y,
-                        bg_b: s.bars.bg_color.to_linear().to_vec4().z,
-                        bg_a: s.bars.bg_color.to_linear().to_vec4().w,
+                        bg_r: bars_config.bg_color.to_linear().to_vec4().x,
+                        bg_g: bars_config.bg_color.to_linear().to_vec4().y,
+                        bg_b: bars_config.bg_color.to_linear().to_vec4().z,
+                        bg_a: bars_config.bg_color.to_linear().to_vec4().w,
                     },
                 });
 
@@ -289,6 +294,10 @@ pub fn create_hud(
         }
     }
 
+    // Update the Node position using the origin component - this part is tricky because Commands
+    // don't allow direct access to components on the same frame they're created
+    // We'll handle position updates in a separate system instead
+
     // Update the HudHandles component on the root entity
     commands.entity(root).insert(HudHandles {
         root: Some(root),
@@ -296,7 +305,7 @@ pub fn create_hud(
         graph_entity: graph_entity_opt,
         graph_material: graph_handle_opt,
         graph_labels,
-        graph_label_width: s.graph.label_width.max(40.0),
+        graph_label_width: graph_config.label_width.max(40.0),
         bars_root: bars_root_opt,
         bar_entities,
         bar_materials,
@@ -305,17 +314,13 @@ pub fn create_hud(
 }
 
 /// System that samples all registered metric providers and updates current values.
-/// The system only runs if PerfHudSettings is present and enabled.
+/// This system now runs unconditionally to collect metric data.
+
 pub fn sample_diagnostics(
     diagnostics: Option<Res<DiagnosticsStore>>,
-    settings: Option<Res<PerfHudSettings>>,
     mut sampled_values_query: Query<&mut SampledValues>,
     mut providers: ResMut<MetricProviders>,
 ) {
-    let Some(_s) = settings else {
-        return;
-    };
-
     let Ok(mut samples) = sampled_values_query.single_mut() else {
         return;
     };
@@ -332,11 +337,13 @@ pub fn sample_diagnostics(
 }
 
 /// System that updates graph and bar displays with current performance data.
-/// The system only runs if both PerfHudSettings and HudHandles are present.
+/// Now uses settings stored as components on the HUD entity.
 #[allow(clippy::too_many_arguments)]
 pub fn update_graph_and_bars(
-    settings: Option<Res<PerfHudSettings>>,
     mut hud_query: Query<(
+        &HudOrigin,
+        &GraphConfig,
+        &BarsConfig,
         &mut HudHandles,
         &mut SampledValues,
         &mut HistoryBuffers,
@@ -349,28 +356,24 @@ pub fn update_graph_and_bars(
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
 ) {
-    let Some(s) = settings else {
-        return;
-    };
-
-    let Ok((h, samples, mut history, mut scale_state, mut bar_scale_states)) =
+    let Ok((_, graph_config, bars_config, h, samples, mut history, mut scale_state, mut bar_scale_states)) =
         hud_query.single_mut()
     else {
         return;
     };
 
-    let curve_count = s.graph.curves.len().min(MAX_CURVES);
+    let curve_count = graph_config.curves.len().min(MAX_CURVES);
 
     // Process raw metric values through smoothing and quantization pipeline
     let mut filtered_values = [0.0_f32; MAX_CURVES];
-    for (i, cfg) in s.graph.curves.iter().take(curve_count).enumerate() {
+    for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
         let raw = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
 
         // Step 1: Apply exponential smoothing to reduce noise
         // Formula: new_value = prev_value + (raw_value - prev_value) * smoothing_factor
         let smoothing = cfg
             .smoothing
-            .unwrap_or(s.graph.curve_defaults.smoothing)
+            .unwrap_or(graph_config.curve_defaults.smoothing)
             .clamp(0.0, 1.0);
 
         // Get the most recent value from history as the previous value
@@ -388,7 +391,7 @@ pub fn update_graph_and_bars(
         // Rounds to the nearest multiple of quantize_step
         let step = cfg
             .quantize_step
-            .unwrap_or(s.graph.curve_defaults.quantize_step);
+            .unwrap_or(graph_config.curve_defaults.quantize_step);
         filtered_values[i] = if step > 0.0 {
             (smoothed / step).round() * step
         } else {
@@ -423,14 +426,14 @@ pub fn update_graph_and_bars(
     }
 
     // Calculate target Y-axis range: either fixed from config or auto-scaled from data
-    let mut target_min = s.graph.min_y;
-    let mut target_max = s.graph.max_y;
+    let mut target_min = graph_config.min_y;
+    let mut target_max = graph_config.max_y;
 
     // Check if any curves want autoscaling and we have historical data
-    if s.graph
+    if graph_config
         .curves
         .iter()
-        .any(|c| c.autoscale.unwrap_or(s.graph.curve_defaults.autoscale))
+        .any(|c| c.autoscale.unwrap_or(graph_config.curve_defaults.autoscale))
         && history.length > 0
     {
         // Scan all historical data to find the actual min/max range
@@ -438,9 +441,9 @@ pub fn update_graph_and_bars(
         let mut mn = f32::INFINITY;
         let mut mx = f32::NEG_INFINITY;
 
-        for (i, cfg) in s.graph.curves.iter().take(curve_count).enumerate() {
+        for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
             // Only include curves that want autoscaling in the calculation
-            if cfg.autoscale.unwrap_or(s.graph.curve_defaults.autoscale) {
+            if cfg.autoscale.unwrap_or(graph_config.curve_defaults.autoscale) {
                 for k in 0..len {
                     mn = mn.min(history.values[i][k]);
                     mx = mx.max(history.values[i][k]);
@@ -455,14 +458,14 @@ pub fn update_graph_and_bars(
         }
     }
 
-    if s.graph.y_include_zero {
+    if graph_config.y_include_zero {
         target_min = target_min.min(0.0);
         target_max = target_max.max(0.0);
     }
 
     let span = (target_max - target_min)
         .abs()
-        .max(s.graph.y_min_span.max(1e-3));
+        .max(graph_config.y_min_span.max(1e-3));
     if target_max - target_min < span {
         let mid = 0.5 * (target_max + target_min);
         target_min = mid - 0.5 * span;
@@ -470,19 +473,19 @@ pub fn update_graph_and_bars(
     }
 
     // Margins
-    let margin_frac = s.graph.y_margin_frac.clamp(0.0, 0.45);
+    let margin_frac = graph_config.y_margin_frac.clamp(0.0, 0.45);
     let margin = span * margin_frac;
     target_min -= margin;
     target_max += margin;
     // Step quantization
-    if s.graph.y_step_quantize > 0.0 {
-        let step = s.graph.y_step_quantize;
+    if graph_config.y_step_quantize > 0.0 {
+        let step = graph_config.y_step_quantize;
         target_min = (target_min / step).floor() * step;
         target_max = (target_max / step).ceil() * step;
     }
 
     // Smoothing
-    let a = s.graph.y_scale_smoothing.clamp(0.0, 1.0);
+    let a = graph_config.y_scale_smoothing.clamp(0.0, 1.0);
     if scale_state.max_y <= scale_state.min_y {
         scale_state.min_y = target_min;
         scale_state.max_y = target_max;
@@ -495,10 +498,9 @@ pub fn update_graph_and_bars(
     let current_max = (scale_state.max_y).max(current_min + 1e-3);
 
     // Update graph labels dynamically based on configured curves
-    if s.graph.enabled && !h.graph_labels.is_empty() {
+    if graph_config.enabled && !h.graph_labels.is_empty() {
         for label_handle in &h.graph_labels {
-            let Some(curve) = s
-                .graph
+            let Some(curve) = graph_config
                 .curves
                 .iter()
                 .find(|c| c.metric.id == label_handle.metric_id)
@@ -534,27 +536,27 @@ pub fn update_graph_and_bars(
     }
 
     // Update graph material (when enabled)
-    if s.graph.enabled {
+    if graph_config.enabled {
         if let Some(handle) = &h.graph_material {
             if let Some(mat) = graph_mats.get_mut(handle) {
                 mat.params.length = history.length;
                 mat.params.min_y = current_min;
                 mat.params.max_y = current_max;
-                mat.params.thickness = s.graph.thickness;
-                mat.params.bg_color = s.graph.bg_color.to_linear().to_vec4();
-                mat.params.border_color = s.graph.border.color.to_linear().to_vec4();
-                mat.params.border_thickness = s.graph.border.thickness; // pixels
+                mat.params.thickness = graph_config.thickness;
+                mat.params.bg_color = graph_config.bg_color.to_linear().to_vec4();
+                mat.params.border_color = graph_config.border.color.to_linear().to_vec4();
+                mat.params.border_thickness = graph_config.border.thickness; // pixels
                 mat.params.border_thickness_uv_x =
-                    (s.graph.border.thickness / s.graph.size.x).max(0.0001);
+                    (graph_config.border.thickness / graph_config.size.x).max(0.0001);
                 mat.params.border_thickness_uv_y =
-                    (s.graph.border.thickness / s.graph.size.y).max(0.0001);
-                mat.params.border_left = if s.graph.border.left { 1 } else { 0 };
-                mat.params.border_bottom = if s.graph.border.bottom { 1 } else { 0 };
-                mat.params.border_right = if s.graph.border.right { 1 } else { 0 };
-                mat.params.border_top = if s.graph.border.top { 1 } else { 0 };
+                    (graph_config.border.thickness / graph_config.size.y).max(0.0001);
+                mat.params.border_left = if graph_config.border.left { 1 } else { 0 };
+                mat.params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
+                mat.params.border_right = if graph_config.border.right { 1 } else { 0 };
+                mat.params.border_top = if graph_config.border.top { 1 } else { 0 };
                 mat.params.curve_count = curve_count as u32;
                 // Sync curve colors every frame to allow hot updates
-                for (i, c) in s.graph.curves.iter().take(curve_count).enumerate() {
+                for (i, c) in graph_config.curves.iter().take(curve_count).enumerate() {
                     mat.params.colors[i] = c.metric.color.to_linear().to_vec4();
                 }
                 for i in curve_count..MAX_CURVES {
@@ -599,8 +601,8 @@ pub fn update_graph_and_bars(
     }
 
     // Update bars (when enabled)
-    if s.bars.enabled {
-        for (i, cfg) in s.bars.bars.iter().enumerate() {
+    if bars_config.enabled {
+        for (i, cfg) in bars_config.bars.iter().enumerate() {
             if i >= h.bar_materials.len() {
                 break;
             }
@@ -614,7 +616,7 @@ pub fn update_graph_and_bars(
 
             // Calculate the dynamic range based on the bar's scale mode
             let (range_min, range_max) = scale_state.calculate_range(
-                &cfg.scale_mode,
+                &cfg.scale_mode.clone().into(), // Convert to config::BarScaleMode
                 cfg.min_value,
                 cfg.max_value,
                 cfg.min_limit,
@@ -635,7 +637,7 @@ pub fn update_graph_and_bars(
                 mat.params.g = v.y;
                 mat.params.b = v.z;
                 mat.params.a = v.w;
-                let bg = s.bars.bg_color.to_linear().to_vec4();
+                let bg = bars_config.bg_color.to_linear().to_vec4();
                 mat.params.bg_r = bg.x;
                 mat.params.bg_g = bg.y;
                 mat.params.bg_b = bg.z;
@@ -657,7 +659,7 @@ pub fn update_graph_and_bars(
                 } else {
                     format!("{val:.precision$}", precision = precision)
                 };
-                let show_value = cfg.show_value.unwrap_or(s.bars.show_value_default);
+                let show_value = cfg.show_value.unwrap_or(bars_config.show_value_default);
                 let display_text = if show_value {
                     let value_text = if unit.is_empty() {
                         formatted
@@ -679,6 +681,16 @@ pub fn update_graph_and_bars(
                 }
             }
         }
+    }
+}
+
+/// System that updates the HUD position based on the HudOrigin component
+pub fn update_hud_position(
+    mut hud_query: Query<(&HudOrigin, &mut Node), Changed<HudOrigin>>,
+) {
+    for (origin, mut node) in hud_query.iter_mut() {
+        node.left = Val::Px(origin.origin.x);
+        node.top = Val::Px(origin.origin.y);
     }
 }
 

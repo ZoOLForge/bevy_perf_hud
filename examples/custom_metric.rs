@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BarConfig, BarScaleMode, BevyPerfHudPlugin, CurveConfig, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfHudSettings, PerfMetricProvider, create_hud,
+    PerfHudAppExt, PerfMetricProvider, create_hud, GraphConfig, BarsConfig
 };
 
 const CUSTOM_METRIC_ID: &str = "custom/network_latency_ms";
@@ -44,7 +44,10 @@ impl PerfMetricProvider for NetworkLatencyMetric {
     }
 }
 
-fn main() {
+// Function to apply custom metric configuration to the HUD
+fn apply_custom_metric_config(
+    mut hud_query: Query<(&mut GraphConfig, &mut BarsConfig)>,
+) {
     // Extend default HUD with network latency metric
     let latency_metric = MetricDefinition {
         id: CUSTOM_METRIC_ID.into(),
@@ -54,13 +57,13 @@ fn main() {
         color: Color::srgb(0.65, 0.11, 0.0),
     };
 
-    let mut settings = PerfHudSettings {
-        origin: Vec2::new(16.0, 16.0),
-        ..Default::default()
+    let Ok((mut graph_config, mut bars_config)) = hud_query.single_mut() else {
+        return;
     };
 
-    settings.graph.max_y = 160.0;
-    settings.graph.curves.push(CurveConfig {
+    // Update graph settings
+    graph_config.max_y = 160.0;
+    graph_config.curves.push(CurveConfig {
         metric: latency_metric.clone(),
         autoscale: Some(false),
         smoothing: Some(0.25),
@@ -69,7 +72,7 @@ fn main() {
 
     // Add custom latency metric with percentile scaling
     // Percentile mode is perfect for latency as it handles spikes gracefully
-    settings.bars.bars.insert(
+    bars_config.bars.insert(
         0,
         BarConfig {
             metric: latency_metric.clone(),
@@ -87,8 +90,7 @@ fn main() {
     );
 
     // Also modify the entity count bar to use auto-scaling for better demo
-    if let Some(entity_bar) = settings
-        .bars
+    if let Some(entity_bar) = bars_config
         .bars
         .iter_mut()
         .find(|bar| bar.metric.id == "entity_count")
@@ -102,10 +104,11 @@ fn main() {
         entity_bar.max_limit = Some(100000.0); // Reasonable upper bound
         entity_bar.show_value = Some(true); // Show actual count
     }
+}
 
+fn main() {
     App::new()
         .insert_resource(ClearColor(Color::srgba(0.02, 0.02, 0.05, 1.0)))
-        .insert_resource(settings)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "bevy_perf_hud custom metric".into(),
@@ -117,6 +120,7 @@ fn main() {
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, create_hud) // Create HUD layout
+        .add_systems(Startup, apply_custom_metric_config.after(create_hud)) // Apply custom configurations
         .add_perf_metric_provider(NetworkLatencyMetric::default())
         .run();
 }

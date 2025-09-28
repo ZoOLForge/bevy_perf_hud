@@ -1,8 +1,8 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    create_hud, BarConfig, BarScaleMode, BevyPerfHudPlugin, HudHandles, MetricDefinition,
-    PerfHudSettings,
+    create_hud, BarsConfig, BarScaleState, BevyPerfHudPlugin, HudHandles, GraphConfig, 
+    HudOrigin, BarConfig, BarScaleMode, MetricDefinition
 };
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
@@ -305,6 +305,57 @@ fn toggle_hud_mode_on_f1(
     }
 }
 
+fn apply_custom_hud_settings(
+    mut hud_query: Query<(&mut BarsConfig, &mut HudOrigin), With<HudHandles>>, // Get the HUD components
+) {
+    let Ok((mut bars_config, mut origin)) = hud_query.single_mut() else {
+        return;
+    };
+
+    // Customize the entity count bar to use auto-scaling
+    // since entity count varies dramatically in this demo
+    if let Some(entity_bar) = bars_config
+        .bars
+        .iter_mut()
+        .find(|bar| bar.metric.id == "entity_count")
+    {
+        entity_bar.scale_mode = BarScaleMode::Auto {
+            smoothing: 0.8,    // Smooth scaling changes
+            min_span: 100.0,   // Minimum range of 100 entities
+            margin_frac: 0.25, // 25% headroom for spawning bursts
+        };
+        entity_bar.show_value = Some(true); // Show actual entity count
+    }
+
+    // Add FPS bar with percentile scaling to handle frame spikes
+    let fps_metric = MetricDefinition {
+        id: "fps".into(),
+        label: Some("FPS (P5-P95)".into()),
+        unit: Some("fps".into()),
+        precision: 0,
+        color: Color::srgb(0.2, 0.8, 0.2),
+    };
+    bars_config.bars.insert(
+        0,
+        BarConfig {
+            metric: fps_metric,
+            show_value: Some(true),
+            min_value: 0.0,   // Fallback minimum
+            max_value: 144.0, // Fallback maximum
+            scale_mode: BarScaleMode::Percentile {
+                lower: 5.0,        // P5 - ignore bottom 5% of frames
+                upper: 95.0,       // P95 - ignore top 5% spikes
+                sample_count: 120, // 2 seconds at 60fps
+            },
+            min_limit: Some(0.0),   // FPS can't be negative
+            max_limit: Some(300.0), // Cap at reasonable maximum
+        },
+    );
+
+    // Update the origin
+    origin.origin = Vec2::new(960.0, 16.0);
+}
+
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
@@ -312,55 +363,6 @@ fn main() {
         .init_resource::<RngState>()
         .init_resource::<CubeState>()
         .init_resource::<HudMode>()
-        .insert_resource({
-            let mut settings = PerfHudSettings {
-                origin: Vec2::new(960.0, 16.0),
-                ..default()
-            };
-
-            // Customize the entity count bar to use auto-scaling
-            // since entity count varies dramatically in this demo
-            if let Some(entity_bar) = settings
-                .bars
-                .bars
-                .iter_mut()
-                .find(|bar| bar.metric.id == "entity_count")
-            {
-                entity_bar.scale_mode = BarScaleMode::Auto {
-                    smoothing: 0.8,    // Smooth scaling changes
-                    min_span: 100.0,   // Minimum range of 100 entities
-                    margin_frac: 0.25, // 25% headroom for spawning bursts
-                };
-                entity_bar.show_value = Some(true); // Show actual entity count
-            }
-
-            // Add FPS bar with percentile scaling to handle frame spikes
-            let fps_metric = MetricDefinition {
-                id: "fps".into(),
-                label: Some("FPS (P5-P95)".into()),
-                unit: Some("fps".into()),
-                precision: 0,
-                color: Color::srgb(0.2, 0.8, 0.2),
-            };
-            settings.bars.bars.insert(
-                0,
-                BarConfig {
-                    metric: fps_metric,
-                    show_value: Some(true),
-                    min_value: 0.0,   // Fallback minimum
-                    max_value: 144.0, // Fallback maximum
-                    scale_mode: BarScaleMode::Percentile {
-                        lower: 5.0,        // P5 - ignore bottom 5% of frames
-                        upper: 95.0,       // P95 - ignore top 5% spikes
-                        sample_count: 120, // 2 seconds at 60fps
-                    },
-                    min_limit: Some(0.0),   // FPS can't be negative
-                    max_limit: Some(300.0), // Cap at reasonable maximum
-                },
-            );
-
-            settings
-        })
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "bevy_perf_hud demo".into(),
@@ -372,6 +374,7 @@ fn main() {
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_3d)
         .add_systems(Startup, create_hud)
+        .add_systems(Startup, apply_custom_hud_settings.after(create_hud)) // Apply customizations after HUD is created
         .add_systems(
             Update,
             (

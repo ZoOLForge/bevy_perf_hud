@@ -5,157 +5,7 @@
 use crate::constants::*;
 use bevy::{color::Color, math::Vec2, prelude::Resource};
 
-/// Main configuration resource for the performance HUD.
-///
-/// This resource controls all aspects of the HUD's appearance and behavior.
-/// Insert this resource into your Bevy app to customize the HUD settings.
-/// Note: The HUD is always active when the plugin is added, individual components (graph/bars) have their own enabled flags.
-///
-/// # Example
-/// ```rust
-/// use bevy::prelude::*;
-/// use bevy_perf_hud::PerfHudSettings;
-///
-/// App::new()
-///     .insert_resource(PerfHudSettings {
-///         origin: Vec2::new(10.0, 10.0), // Top-left corner
-///         ..default()
-///     })
-///     .run();
-/// ```
-#[derive(Debug, Resource)]
-pub struct PerfHudSettings {
-    /// Screen position (in pixels) where the HUD should be anchored
-    pub origin: Vec2,
-    /// Configuration for the performance graph display
-    pub graph: GraphSettings,
-    /// Configuration for the performance bars display
-    pub bars: BarsSettings,
-}
 
-impl Default for PerfHudSettings {
-    fn default() -> Self {
-        let frame_metric = MetricDefinition {
-            id: "frame_time_ms".into(),
-            label: Some("FT:".into()),
-            unit: Some("ms".into()),
-            precision: 1,
-            color: Color::srgb(0.4, 0.4, 0.4),
-        };
-        let fps_metric = MetricDefinition {
-            id: "fps".into(),
-            label: Some("FPS:".into()),
-            unit: Some("fps".into()),
-            precision: 0,
-            color: Color::srgb(1.0, 1.0, 1.0),
-        };
-        let entity_metric = MetricDefinition {
-            id: "entity_count".into(),
-            label: Some("Ent:".into()),
-            unit: None,
-            precision: 0,
-            color: Color::srgb(0.1, 0.8, 0.4),
-        };
-        let sys_cpu_metric = MetricDefinition {
-            id: SYSTEM_CPU_USAGE_ID.to_owned(),
-            label: Some("SysCPU".into()),
-            unit: Some("%".into()),
-            precision: 1,
-            color: Color::srgb(0.96, 0.76, 0.18),
-        };
-        let sys_mem_metric = MetricDefinition {
-            id: SYSTEM_MEM_USAGE_ID.to_owned(),
-            label: Some("SysMem".into()),
-            unit: Some("%".into()),
-            precision: 1,
-            color: Color::srgb(0.28, 0.56, 0.89),
-        };
-
-        Self {
-            origin: Vec2::new(960.0, 16.0),
-            graph: GraphSettings {
-                enabled: true,
-                size: Vec2::new(300.0, 80.0),
-                label_width: 60.0,
-                min_y: 0.0,
-                max_y: 30.0,
-                thickness: 0.012,
-                curves: vec![
-                    CurveConfig {
-                        metric: frame_metric.clone(),
-                        autoscale: None,
-                        smoothing: Some(0.25),
-                        quantize_step: Some(0.1),
-                    },
-                    CurveConfig {
-                        metric: fps_metric.clone(),
-                        autoscale: None,
-                        smoothing: None,
-                        quantize_step: None,
-                    },
-                ],
-                curve_defaults: CurveDefaults {
-                    autoscale: true,
-                    smoothing: 0.2,
-                    quantize_step: 1.0,
-                },
-                bg_color: Color::srgba(0.0, 0.0, 0.0, 0.25),
-                border: GraphBorder {
-                    color: Color::srgba(1.0, 1.0, 1.0, 1.0),
-                    thickness: 2.0,
-                    left: true,
-                    bottom: true,
-                    right: false,
-                    top: false,
-                },
-                y_ticks: 2,
-                y_include_zero: true,
-                y_min_span: 5.0,
-                y_margin_frac: 0.10,
-                y_step_quantize: 5.0,
-                y_scale_smoothing: 0.3,
-            },
-            bars: BarsSettings {
-                enabled: true,
-                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-                show_value_default: true,
-                bars: vec![
-                    BarConfig {
-                        metric: sys_cpu_metric,
-                        show_value: Some(false),
-                        min_value: 0.0,
-                        max_value: 100.0,                // CPU usage percentage
-                        scale_mode: BarScaleMode::Fixed, // Keep fixed for CPU % (known 0-100% range)
-                        min_limit: None,
-                        max_limit: None,
-                    },
-                    BarConfig {
-                        metric: sys_mem_metric,
-                        show_value: Some(false),
-                        min_value: 0.0,
-                        max_value: 100.0,                // Memory usage percentage
-                        scale_mode: BarScaleMode::Fixed, // Keep fixed for memory % (known 0-100% range)
-                        min_limit: None,
-                        max_limit: None,
-                    },
-                    BarConfig {
-                        metric: entity_metric,
-                        show_value: None,
-                        min_value: 0.0,
-                        max_value: 10000.0, // Entity count range - fallback values
-                        scale_mode: BarScaleMode::Auto {
-                            smoothing: 0.85,  // Smooth transitions for entity count changes
-                            min_span: 50.0,   // Minimum range of 50 entities
-                            margin_frac: 0.2, // 20% margin for growth headroom
-                        },
-                        min_limit: Some(0.0),     // Entities can't be negative
-                        max_limit: Some(50000.0), // Cap at reasonable maximum
-                    },
-                ],
-            },
-        }
-    }
-}
 
 /// Configuration for the performance graph (chart) display.
 ///
@@ -229,6 +79,154 @@ impl GraphSettings {
         }
         
         params
+    }
+}
+
+impl Default for GraphSettings {
+    fn default() -> Self {
+        let frame_metric = MetricDefinition {
+            id: "frame_time_ms".into(),
+            label: Some("FT:".into()),
+            unit: Some("ms".into()),
+            precision: 1,
+            color: Color::srgb(0.4, 0.4, 0.4),
+        };
+        let fps_metric = MetricDefinition {
+            id: "fps".into(),
+            label: Some("FPS:".into()),
+            unit: Some("fps".into()),
+            precision: 0,
+            color: Color::srgb(1.0, 1.0, 1.0),
+        };
+        let entity_metric = MetricDefinition {
+            id: "entity_count".into(),
+            label: Some("Ent:".into()),
+            unit: None,
+            precision: 0,
+            color: Color::srgb(0.1, 0.8, 0.4),
+        };
+        let sys_cpu_metric = MetricDefinition {
+            id: SYSTEM_CPU_USAGE_ID.to_owned(),
+            label: Some("SysCPU".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.96, 0.76, 0.18),
+        };
+        let sys_mem_metric = MetricDefinition {
+            id: SYSTEM_MEM_USAGE_ID.to_owned(),
+            label: Some("SysMem".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.28, 0.56, 0.89),
+        };
+
+        Self {
+            enabled: true,
+            size: Vec2::new(300.0, 80.0),
+            label_width: 60.0,
+            min_y: 0.0,
+            max_y: 30.0,
+            thickness: 0.012,
+            curves: vec![
+                CurveConfig {
+                    metric: frame_metric.clone(),
+                    autoscale: None,
+                    smoothing: Some(0.25),
+                    quantize_step: Some(0.1),
+                },
+                CurveConfig {
+                    metric: fps_metric.clone(),
+                    autoscale: None,
+                    smoothing: None,
+                    quantize_step: None,
+                },
+            ],
+            curve_defaults: CurveDefaults {
+                autoscale: true,
+                smoothing: 0.2,
+                quantize_step: 1.0,
+            },
+            bg_color: Color::srgba(0.0, 0.0, 0.0, 0.25),
+            border: GraphBorder {
+                color: Color::srgba(1.0, 1.0, 1.0, 1.0),
+                thickness: 2.0,
+                left: true,
+                bottom: true,
+                right: false,
+                top: false,
+            },
+            y_ticks: 2,
+            y_include_zero: true,
+            y_min_span: 5.0,
+            y_margin_frac: 0.10,
+            y_step_quantize: 5.0,
+            y_scale_smoothing: 0.3,
+        }
+    }
+}
+
+impl Default for BarsSettings {
+    fn default() -> Self {
+        let sys_cpu_metric = MetricDefinition {
+            id: SYSTEM_CPU_USAGE_ID.to_owned(),
+            label: Some("SysCPU".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.96, 0.76, 0.18),
+        };
+        let sys_mem_metric = MetricDefinition {
+            id: SYSTEM_MEM_USAGE_ID.to_owned(),
+            label: Some("SysMem".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.28, 0.56, 0.89),
+        };
+        let entity_metric = MetricDefinition {
+            id: "entity_count".into(),
+            label: Some("Ent:".into()),
+            unit: None,
+            precision: 0,
+            color: Color::srgb(0.1, 0.8, 0.4),
+        };
+
+        Self {
+            enabled: true,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+            show_value_default: true,
+            bars: vec![
+                BarConfig {
+                    metric: sys_cpu_metric,
+                    show_value: Some(false),
+                    min_value: 0.0,
+                    max_value: 100.0,                // CPU usage percentage
+                    scale_mode: BarScaleMode::Fixed, // Keep fixed for CPU % (known 0-100% range)
+                    min_limit: None,
+                    max_limit: None,
+                },
+                BarConfig {
+                    metric: sys_mem_metric,
+                    show_value: Some(false),
+                    min_value: 0.0,
+                    max_value: 100.0,                // Memory usage percentage
+                    scale_mode: BarScaleMode::Fixed, // Keep fixed for memory % (known 0-100% range)
+                    min_limit: None,
+                    max_limit: None,
+                },
+                BarConfig {
+                    metric: entity_metric,
+                    show_value: None,
+                    min_value: 0.0,
+                    max_value: 10000.0, // Entity count range - fallback values
+                    scale_mode: BarScaleMode::Auto {
+                        smoothing: 0.85,  // Smooth transitions for entity count changes
+                        min_span: 50.0,   // Minimum range of 50 entities
+                        margin_frac: 0.2, // 20% margin for growth headroom
+                    },
+                    min_limit: Some(0.0),     // Entities can't be negative
+                    max_limit: Some(50000.0), // Cap at reasonable maximum
+                },
+            ],
+        }
     }
 }
 

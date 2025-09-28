@@ -10,16 +10,18 @@ mod bar_scale;
 mod components;
 mod config;
 mod constants;
+pub mod hud_settings_components;
+pub use hud_settings_components::{HudOrigin, GraphConfig, BarsConfig, BarConfig, BarScaleMode, MetricDefinition, CurveConfig};
 mod plugin;
 mod providers;
 mod render;
-mod resources;
 mod systems;
 
 pub use bar_scale::*;
 pub use components::*;
-pub use config::*;
+
 pub use constants::*;
+
 pub use plugin::BevyPerfHudPlugin;
 pub use providers::*;
 pub use render::*;
