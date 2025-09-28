@@ -7,7 +7,7 @@ fn main() {
         .insert_resource(ClearColor(Color::srgba(0.02, 0.02, 0.05, 1.0)))
         .add_plugins(DefaultPlugins)
         .add_plugins(BevyPerfHudPlugin)
-        .add_systems(Startup, setup_bars_hud) // Create bars-only HUD layout with custom configuration
+        .add_systems(Startup, setup_bars_hud)
         .add_perf_metric_provider(VariableMetric::new("variable/cpu_load", 0.0, 100.0))
         .add_perf_metric_provider(VariableMetric::new("variable/memory_usage", 100.0, 2000.0))
         .add_perf_metric_provider(SpikyMetric::new("spiky/latency", 10.0, 500.0))
@@ -24,17 +24,87 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         ..default()
     });
 
-    // Spawn root UI node with default settings as components
+    // Get the bars configuration from the default and customize it
+    let mut bars_config = BarsConfig::default();
+    
+    // Configure custom bars with different scaling modes for the demo
+    let fixed_mode_metric = MetricDefinition {
+        id: "variable/cpu_load".into(),
+        label: Some("CPU (Fixed 0-100%)".into()),
+        unit: Some("%".into()),
+        precision: 1,
+        color: Color::srgb(1.0, 0.3, 0.3),
+    };
+
+    let auto_mode_metric = MetricDefinition {
+        id: "variable/memory_usage".into(),
+        label: Some("Memory (Auto)".into()),
+        unit: Some("MB".into()),
+        precision: 0,
+        color: Color::srgb(0.3, 1.0, 0.3),
+    };
+
+    let percentile_mode_metric = MetricDefinition {
+        id: "spiky/latency".into(),
+        label: Some("Latency (P5-P95)".into()),
+        unit: Some("ms".into()),
+        precision: 1,
+        color: Color::srgb(0.3, 0.3, 1.0),
+    };
+
+    // Configure bars with different scaling modes
+    bars_config.bars = vec![
+        // Fixed mode bar - traditional static range
+        BarConfig {
+            metric: fixed_mode_metric,
+            show_value: Some(true),
+            min_value: 0.0,
+            max_value: 100.0,
+            scale_mode: BarScaleMode::Fixed,
+            min_limit: None,
+            max_limit: None,
+        },
+        // Auto mode bar - adapts to data range with smoothing
+        BarConfig {
+            metric: auto_mode_metric,
+            show_value: Some(true),
+            min_value: 0.0,    // Used as fallback if no data
+            max_value: 1000.0, // Used as fallback if no data
+            scale_mode: BarScaleMode::Auto {
+                smoothing: 0.8,   // Smooth transitions (0.0 = instant, 1.0 = never change)
+                min_span: 100.0,  // Minimum range span
+                margin_frac: 0.1, // 10% margin above and below data range
+            },
+            min_limit: Some(0.0),    // Hard minimum limit
+            max_limit: Some(2500.0), // Hard maximum limit
+        },
+        // Percentile mode bar - uses P5 to P95 range, good for spiky data
+        BarConfig {
+            metric: percentile_mode_metric,
+            show_value: Some(true),
+            min_value: 0.0,   // Used as fallback if insufficient data
+            max_value: 200.0, // Used as fallback if insufficient data
+            scale_mode: BarScaleMode::Percentile {
+                lower: 5.0,       // P5 percentile for minimum
+                upper: 95.0,      // P95 percentile for maximum
+                sample_count: 60, // Use last 60 samples (~1 second at 60fps)
+            },
+            min_limit: Some(0.0),    // Hard minimum limit
+            max_limit: Some(1000.0), // Hard maximum limit
+        },
+    ];
+
+    // Spawn root UI node with customized settings as components
     let root = commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(16.0),
-                left: Val::Px(960.0),
+                left: Val::Px(20.0),
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            BarsConfig::default(),
+            bars_config.clone(),  // Use the customized config instead of default
             BarsHandles::default(),
             SampledValues::default(),
             BarScaleStates::default(),
@@ -42,8 +112,8 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         .id();
     commands.entity(root).insert(Visibility::Visible);
 
-    // Get the bars configuration from the default and customize it
-    let mut bars_config = BarsConfig::default();
+    // Use the configured bars_config that we created earlier
+    // The variable bars_config is already what we need
     
     // Configure custom bars with different scaling modes for the demo
     let fixed_mode_metric = MetricDefinition {
