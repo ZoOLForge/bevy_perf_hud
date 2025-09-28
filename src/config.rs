@@ -197,6 +197,41 @@ pub struct GraphSettings {
     pub y_scale_smoothing: f32,
 }
 
+impl GraphSettings {
+    /// Convert GraphSettings to MultiLineGraphParams with initial values
+    pub fn to_graph_params(&self) -> crate::render::MultiLineGraphParams {
+        use crate::render::MultiLineGraphParams;
+        use bevy::color::ColorToComponents;
+
+        let mut params = MultiLineGraphParams::default();
+        #[allow(clippy::field_reassign_with_default)]
+        {
+            params.min_y = self.min_y;
+            params.max_y = self.max_y;
+            params.thickness = self.thickness;
+            params.bg_color = self.bg_color.to_linear().to_vec4();
+            params.border_color = self.border.color.to_linear().to_vec4();
+            params.border_thickness = self.border.thickness; // pixels
+            params.border_thickness_uv_x =
+                (self.border.thickness / self.size.x).max(0.0001);
+            params.border_thickness_uv_y =
+                (self.border.thickness / self.size.y).max(0.0001);
+            params.border_left = if self.border.left { 1 } else { 0 };
+            params.border_bottom = if self.border.bottom { 1 } else { 0 };
+            params.border_right = if self.border.right { 1 } else { 0 };
+            params.border_top = if self.border.top { 1 } else { 0 };
+            params.curve_count = self.curves.len().min(crate::MAX_CURVES) as u32;
+            // Write curve colors
+            for (i, c) in self.curves.iter().take(crate::MAX_CURVES).enumerate() {
+                let v = c.metric.color.to_linear().to_vec4();
+                params.colors[i] = v;
+            }
+        }
+        
+        params
+    }
+}
+
 /// Configuration for graph border appearance.
 #[derive(Debug, Clone)]
 pub struct GraphBorder {
@@ -328,4 +363,89 @@ pub struct MetricDefinition {
     pub precision: u32,
     /// Color for this metric's curve/bar
     pub color: Color,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::color::Color;
+    use bevy::color::ColorToComponents;
+    use bevy::math::Vec2;
+
+    #[test]
+    fn test_graph_settings_to_params_conversion() {
+        let graph_settings = GraphSettings {
+            enabled: true,
+            size: Vec2::new(300.0, 80.0),
+            label_width: 60.0,
+            min_y: 0.0,
+            max_y: 30.0,
+            thickness: 0.012,
+            curves: vec![
+                CurveConfig {
+                    metric: MetricDefinition {
+                        id: "test_metric_1".to_string(),
+                        label: Some("Test1:".to_string()),
+                        unit: Some("ms".to_string()),
+                        precision: 1,
+                        color: Color::srgb(0.4, 0.4, 0.4),
+                    },
+                    autoscale: None,
+                    smoothing: Some(0.25),
+                    quantize_step: Some(0.1),
+                },
+                CurveConfig {
+                    metric: MetricDefinition {
+                        id: "test_metric_2".to_string(),
+                        label: Some("Test2:".to_string()),
+                        unit: Some("fps".to_string()),
+                        precision: 0,
+                        color: Color::srgb(1.0, 1.0, 1.0),
+                    },
+                    autoscale: None,
+                    smoothing: None,
+                    quantize_step: None,
+                },
+            ],
+            curve_defaults: CurveDefaults {
+                autoscale: true,
+                smoothing: 0.2,
+                quantize_step: 1.0,
+            },
+            bg_color: Color::srgba(0.0, 0.0, 0.0, 0.25),
+            border: GraphBorder {
+                color: Color::srgba(1.0, 1.0, 1.0, 1.0),
+                thickness: 2.0,
+                left: true,
+                bottom: true,
+                right: false,
+                top: false,
+            },
+            y_ticks: 2,
+            y_include_zero: true,
+            y_min_span: 5.0,
+            y_margin_frac: 0.10,
+            y_step_quantize: 5.0,
+            y_scale_smoothing: 0.3,
+        };
+
+        let params = graph_settings.to_graph_params();
+
+        // Test that basic values are correctly transferred
+        assert_eq!(params.min_y, 0.0);
+        assert_eq!(params.max_y, 30.0);
+        assert_eq!(params.thickness, 0.012);
+        assert_eq!(params.bg_color, Color::srgba(0.0, 0.0, 0.0, 0.25).to_linear().to_vec4());
+        assert_eq!(params.border_color, Color::srgba(1.0, 1.0, 1.0, 1.0).to_linear().to_vec4());
+        assert_eq!(params.border_thickness, 2.0);
+        assert_eq!(params.border_left, 1);
+        assert_eq!(params.border_bottom, 1);
+        assert_eq!(params.border_right, 0);
+        assert_eq!(params.border_top, 0);
+        assert_eq!(params.curve_count, 2);
+        
+        // Test that curve colors are transferred correctly
+        assert_eq!(params.colors[0], Color::srgb(0.4, 0.4, 0.4).to_linear().to_vec4());
+        assert_eq!(params.colors[1], Color::srgb(1.0, 1.0, 1.0).to_linear().to_vec4());
+    }
 }
