@@ -424,11 +424,8 @@ The performance HUD is designed to have minimal impact on your application:
 If the HUD itself is causing performance issues:
 
 ```rust
-// Temporarily disable to isolate performance problems
-.insert_resource(PerfHudSettings {
-enabled: false,
-..default ()
-})
+// To disable the HUD, simply remove the plugin or components
+// No longer using global enabled field
 ```
 
 ## Getting Help

@@ -422,11 +422,8 @@ cargo run --example bar_scaling_modes
 如果 HUD 本身导致性能问题：
 
 ```rust
-// 临时禁用以隔离性能问题
-.insert_resource(PerfHudSettings {
-enabled: false,
-..default ()
-})
+// 要禁用 HUD，只需移除插件或组件
+// 不再使用全局 enabled 字段
 ```
 
 ## 获取帮助

@@ -73,7 +73,7 @@ pub fn create_hud(
     let mut graph_entity_opt: Option<Entity> = None;
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
     let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
-    if graph_config.enabled {
+    {
         let mut graph_params = MultiLineGraphParams::default();
         #[allow(clippy::field_reassign_with_default)]
         {
@@ -110,11 +110,7 @@ pub fn create_hud(
             },))
             .id();
         commands.entity(graph_row).insert(ChildOf(root));
-        commands.entity(graph_row).insert(if graph_config.enabled {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        });
+        commands.entity(graph_row).insert(Visibility::Visible);
         graph_row_opt = Some(graph_row);
 
         // Label container (vertical to avoid overlap)
@@ -176,7 +172,7 @@ pub fn create_hud(
     let mut bar_entities = Vec::new();
     let mut bar_materials = Vec::new();
     let mut bar_labels = Vec::new();
-    if bars_config.enabled && !bars_config.bars.is_empty() {
+    if !bars_config.bars.is_empty() {
         let column_count = 2;
         let column_width = (graph_config.size.x - 12.0) / column_count as f32;
 
@@ -194,7 +190,7 @@ pub fn create_hud(
             },))
             .id();
         commands.entity(bars_root).insert(ChildOf(root));
-        commands.entity(bars_root).insert(if bars_config.enabled && !bars_config.bars.is_empty() {
+        commands.entity(bars_root).insert(if !bars_config.bars.is_empty() {
             Visibility::Visible
         } else {
             Visibility::Hidden
@@ -357,7 +353,7 @@ pub fn create_graph_hud(
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
     let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
 
-    if graph_config.enabled {
+    {
         let mut graph_params = MultiLineGraphParams::default();
         #[allow(clippy::field_reassign_with_default)]
         {
@@ -394,11 +390,7 @@ pub fn create_graph_hud(
             },))
             .id();
         commands.entity(graph_row).insert(ChildOf(root));
-        commands.entity(graph_row).insert(if graph_config.enabled {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        });
+        commands.entity(graph_row).insert(Visibility::Visible);
         graph_row_opt = Some(graph_row);
 
         // Label container (vertical to avoid overlap)
@@ -511,7 +503,7 @@ pub fn create_bars_hud(
     let mut bar_materials = Vec::new();
     let mut bar_labels = Vec::new();
 
-    if bars_config.enabled && !bars_config.bars.is_empty() {
+    if !bars_config.bars.is_empty() {
         let column_count = 2;
         let default_width = 300.0; // Use a default width for bars-only layout
         let column_width = (default_width - 12.0) / column_count as f32;
@@ -530,7 +522,7 @@ pub fn create_bars_hud(
             },))
             .id();
         commands.entity(bars_root).insert(ChildOf(root));
-        commands.entity(bars_root).insert(if bars_config.enabled && !bars_config.bars.is_empty() {
+        commands.entity(bars_root).insert(if !bars_config.bars.is_empty() {
             Visibility::Visible
         } else {
             Visibility::Hidden
@@ -827,7 +819,7 @@ pub fn update_graph_and_bars(
     let current_max = (scale_state.max_y).max(current_min + 1e-3);
 
     // Update graph labels dynamically based on configured curves
-    if graph_config.enabled && !h.graph_labels.is_empty() {
+    if !h.graph_labels.is_empty() {
         for label_handle in &h.graph_labels {
             let Some(curve) = graph_config
                 .curves
@@ -865,7 +857,7 @@ pub fn update_graph_and_bars(
     }
 
     // Update graph material (when enabled)
-    if graph_config.enabled {
+    {
         if let Some(handle) = &h.graph_material {
             if let Some(mat) = graph_mats.get_mut(handle) {
                 mat.params.length = history.length;
@@ -930,7 +922,7 @@ pub fn update_graph_and_bars(
     }
 
     // Update bars (when enabled)
-    if bars_config.enabled {
+    {
         for (i, cfg) in bars_config.bars.iter().enumerate() {
             if i >= h.bar_materials.len() {
                 break;
@@ -1163,7 +1155,7 @@ pub fn update_graph(
         let current_max = (scale_state.max_y).max(current_min + 1e-3);
 
         // Update graph labels dynamically based on configured curves
-        if graph_config.enabled && !h.graph_labels.is_empty() {
+        if !h.graph_labels.is_empty() {
             for label_handle in &h.graph_labels {
                 let Some(curve) = graph_config
                     .curves
@@ -1201,7 +1193,7 @@ pub fn update_graph(
         }
 
         // Update graph material (when enabled)
-        if graph_config.enabled {
+        {
             if let Some(handle) = &h.graph_material {
                 if let Some(mat) = graph_mats.get_mut(handle) {
                     mat.params.length = history.length;
@@ -1282,7 +1274,7 @@ pub fn update_bars(
 ) {
     for (bars_config, h, samples, mut bar_scale_states) in bars_query.iter_mut() {
         // Update bars (when enabled)
-        if bars_config.enabled {
+        {
             for (i, cfg) in bars_config.bars.iter().enumerate() {
                 if i >= h.bar_materials.len() {
                     break;

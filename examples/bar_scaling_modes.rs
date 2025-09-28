@@ -105,12 +105,13 @@ fn apply_scaling_demo_config(mut bars_query: Query<&mut BarsConfig>) {
 /// Simulates keyboard input for controlling the demo
 fn simulate_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut bars_config_query: Query<&mut BarsConfig>,
+    mut commands: Commands,
+    bars_config_query: Query<Entity, With<BarsConfig>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        if let Ok(mut bars_config) = bars_config_query.single_mut() {
-            // Toggle bars visibility
-            bars_config.enabled = !bars_config.enabled;
+        if let Ok(entity) = bars_config_query.single() {
+            // Toggle bars visibility by removing/adding the component
+            commands.entity(entity).remove::<BarsConfig>();
         }
     }
 }

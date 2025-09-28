@@ -13,8 +13,6 @@ use bevy::{color::Color, math::Vec2, prelude::Resource};
 /// including appearance, scaling behavior, and which metrics to show.
 #[derive(Debug, Clone)]
 pub struct GraphSettings {
-    /// Whether the graph is enabled and should be rendered
-    pub enabled: bool,
     /// Size of the graph area in pixels (width, height)
     pub size: Vec2,
     /// Width in pixels reserved for metric labels on the left side
@@ -121,7 +119,6 @@ impl Default for GraphSettings {
         };
 
         Self {
-            enabled: true,
             size: Vec2::new(300.0, 80.0),
             label_width: 60.0,
             min_y: 0.0,
@@ -190,7 +187,6 @@ impl Default for BarsSettings {
         };
 
         Self {
-            enabled: true,
             bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
             show_value_default: true,
             bars: vec![
@@ -253,8 +249,6 @@ pub struct GraphBorder {
 /// useful for displaying things like CPU usage, memory usage, etc.
 #[derive(Debug, Clone)]
 pub struct BarsSettings {
-    /// Whether the bars are enabled and should be rendered
-    pub enabled: bool,
     /// List of bars (metrics) to display
     pub bars: Vec<BarConfig>,
     /// Background color for all bars (supports transparency)
@@ -373,7 +367,6 @@ mod tests {
     #[test]
     fn test_graph_settings_to_params_conversion() {
         let graph_settings = GraphSettings {
-            enabled: true,
             size: Vec2::new(300.0, 80.0),
             label_width: 60.0,
             min_y: 0.0,
