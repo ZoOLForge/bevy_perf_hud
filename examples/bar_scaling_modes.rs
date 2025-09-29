@@ -86,6 +86,13 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         ));
     }
 
+    // Define UI layout parameters
+    let column_count = 2;
+    let default_width = 300.0; // Use a default width for bars-only layout
+    let column_width = (default_width - 12.0) / column_count as f32;
+    let row_height = 24.0;
+    let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
+
     // Spawn root UI node that contains both the HUD structure and bars
     let root = commands
         .spawn((
