@@ -229,7 +229,7 @@ BarConfig {
 
 ## Custom Metrics
 
-Implement the `PerfMetricProvider` trait and register it with the `PerfHudAppExt` helper:
+Implement the `PerfMetricProvider` trait and register it with the `PerfHudAppExt` helper. The library now automatically handles sampling of custom metrics using a generic sampling system that provides better performance through compile-time type safety:
 
 ### Basic Example
 
@@ -261,99 +261,65 @@ fn main() {
 
 ### Advanced Example
 
-Here's a more realistic example that tracks multiple game metrics:
+Here's a complete example showing how to add your custom metrics with specific visualization configuration:
 
 ```rust
 use bevy::prelude::*;
-use bevy_perf_hud::{PerfHudAppExt, PerfMetricProvider, MetricSampleContext, PerfHudSettings};
-use std::collections::VecDeque;
-
-// Track active player connections
-#[derive(Resource, Default)]
-struct GameStats {
-    active_players: u32,
-    packets_per_second: VecDeque<u32>,
-    last_update: f64,
-}
+use bevy_perf_hud::{PerfHudAppExt, PerfMetricProvider, MetricSampleContext, MetricDefinition, MetricRegistry};
 
 #[derive(Default)]
-struct PlayerCountProvider;
+struct FrameCounter {
+    frame_count: u32,
+}
 
-impl PerfMetricProvider for PlayerCountProvider {
-    fn metric_id(&self) -> &str { "game/players" }
+impl PerfMetricProvider for FrameCounter {
+    fn metric_id(&self) -> &str { "game/frame_count" }
 
-    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
-        ctx.world.get_resource::<GameStats>()
-            .map(|stats| stats.active_players as f32)
+    fn sample(&mut self, _ctx: MetricSampleContext) -> Option<f32> {
+        self.frame_count += 1;
+        Some(self.frame_count as f32)
     }
 }
 
-#[derive(Default)]
-struct NetworkThroughputProvider;
+fn setup_custom_metrics(
+    mut commands: Commands,
+    mut metric_registry: ResMut<MetricRegistry>,
+) {
+    // Register your custom metric definition
+    let frame_count_metric = MetricDefinition {
+        id: "game/frame_count".into(),
+        label: Some("Frame Count".into()),
+        unit: Some("#".into()), // Optional unit suffix
+        precision: 0,           // Number of decimal places
+        color: Color::srgb(0.8, 0.4, 0.0), // Color for display
+    };
 
-impl PerfMetricProvider for NetworkThroughputProvider {
-    fn metric_id(&self) -> &str { "net/packets_sec" }
-
-    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
-        ctx.world.get_resource::<GameStats>()
-            .and_then(|stats| stats.packets_per_second.back().copied())
-            .map(|pps| pps as f32)
-    }
+    // Register with the metric registry
+    metric_registry.register(frame_count_metric.clone());
+    
+    // Also spawn as a component (for internal tracking)
+    commands.spawn(frame_count_metric);
 }
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .insert_resource(GameStats::default())
-        .insert_resource({
-            let mut settings = PerfHudSettings::default();
-            // Add our custom metrics to the HUD display
-            settings.graph.curves.push(bevy_perf_hud::GraphCurveSettings {
-                metric: bevy_perf_hud::MetricSettings {
-                    id: "game/players".to_string(),
-                    ..default()
-                },
-                color: Color::srgb(0.2, 0.8, 0.2),
-                ..default()
-            });
-            settings.bars.bars.push(bevy_perf_hud::BarSettings {
-                metric: bevy_perf_hud::MetricSettings {
-                    id: "net/packets_sec".to_string(),
-                    ..default()
-                },
-                max_value: 1000.0,
-                ..default()
-            });
-            settings
-        })
         .add_plugins(bevy_perf_hud::BevyPerfHudPlugin)
-        .add_perf_metric_provider(PlayerCountProvider)
-        .add_perf_metric_provider(NetworkThroughputProvider)
-        .add_systems(Update, update_game_stats)
+        .add_perf_metric_provider(FrameCounter::default())
+        .add_systems(Startup, setup_custom_metrics)
         .run();
 }
-
-// System to update our custom metrics data
-fn update_game_stats(
-    mut stats: ResMut<GameStats>,
-    time: Res<Time>,
-    // Your actual game systems would provide real data
-) {
-    let now = time.elapsed_secs_f64();
-    if now - stats.last_update > 1.0 {
-        // Simulate some realistic game data
-        stats.active_players = (20.0 + 10.0 * (now * 0.1).sin()) as u32;
-
-        let pps = (500.0 + 200.0 * (now * 0.05).cos()) as u32;
-        stats.packets_per_second.push_back(pps);
-        if stats.packets_per_second.len() > 60 {
-            stats.packets_per_second.pop_front();
-        }
-
-        stats.last_update = now;
-    }
-}
 ```
+
+### How Custom Metrics Work
+
+When you call `add_perf_metric_provider()`:
+
+1. **Component Spawning**: The provider is stored as a `ProviderComponent<P>` on an entity
+2. **Type Registration**: The provider type is registered in the `ProviderRegistry`
+3. **Sampling System Registration**: A specialized generic sampling system is automatically added for this provider type
+4. **Efficient Sampling**: At runtime, the generic system queries all `ProviderComponent<P>` entities and samples them without dynamic dispatch overhead
+5. **Value Storage**: Sampled values are stored in the `SampledValues` component for use by the HUD rendering systems
 
 ### Custom Metric Guidelines
 

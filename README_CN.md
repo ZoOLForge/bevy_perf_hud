@@ -227,7 +227,7 @@ BarConfig {
 
 ## 自定义指标
 
-实现 `PerfMetricProvider` 特性并使用 `PerfHudAppExt` 辅助工具注册：
+实现 `PerfMetricProvider` 特性并使用 `PerfHudAppExt` 辅助工具注册。该库现在自动使用泛型采样系统处理自定义指标，通过编译时类型安全提供更好的性能：
 
 ### 基础示例
 
@@ -259,99 +259,65 @@ fn main() {
 
 ### 高级示例
 
-这是一个更现实的示例，用于跟踪多个游戏指标：
+这是一个完整的示例，展示如何添加具有特定可视化配置的自定义指标：
 
 ```rust
 use bevy::prelude::*;
-use bevy_perf_hud::{PerfHudAppExt, PerfMetricProvider, MetricSampleContext, PerfHudSettings};
-use std::collections::VecDeque;
-
-// 跟踪活跃玩家连接
-#[derive(Resource, Default)]
-struct GameStats {
-    active_players: u32,
-    packets_per_second: VecDeque<u32>,
-    last_update: f64,
-}
+use bevy_perf_hud::{PerfHudAppExt, PerfMetricProvider, MetricSampleContext, MetricDefinition, MetricRegistry};
 
 #[derive(Default)]
-struct PlayerCountProvider;
+struct FrameCounter {
+    frame_count: u32,
+}
 
-impl PerfMetricProvider for PlayerCountProvider {
-    fn metric_id(&self) -> &str { "game/players" }
+impl PerfMetricProvider for FrameCounter {
+    fn metric_id(&self) -> &str { "game/frame_count" }
 
-    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
-        ctx.world.get_resource::<GameStats>()
-            .map(|stats| stats.active_players as f32)
+    fn sample(&mut self, _ctx: MetricSampleContext) -> Option<f32> {
+        self.frame_count += 1;
+        Some(self.frame_count as f32)
     }
 }
 
-#[derive(Default)]
-struct NetworkThroughputProvider;
+fn setup_custom_metrics(
+    mut commands: Commands,
+    mut metric_registry: ResMut<MetricRegistry>,
+) {
+    // 注册你的自定义指标定义
+    let frame_count_metric = MetricDefinition {
+        id: "game/frame_count".into(),
+        label: Some("Frame Count".into()),
+        unit: Some("#".into()), // 可选单位后缀
+        precision: 0,           // 小数位数
+        color: Color::srgb(0.8, 0.4, 0.0), // 显示颜色
+    };
 
-impl PerfMetricProvider for NetworkThroughputProvider {
-    fn metric_id(&self) -> &str { "net/packets_sec" }
-
-    fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32> {
-        ctx.world.get_resource::<GameStats>()
-            .and_then(|stats| stats.packets_per_second.back().copied())
-            .map(|pps| pps as f32)
-    }
+    // 在指标注册表中注册
+    metric_registry.register(frame_count_metric.clone());
+    
+    // 同时作为组件生成（用于内部跟踪）
+    commands.spawn(frame_count_metric);
 }
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .insert_resource(GameStats::default())
-        .insert_resource({
-            let mut settings = PerfHudSettings::default();
-            // 将我们的自定义指标添加到 HUD 显示
-            settings.graph.curves.push(bevy_perf_hud::GraphCurveSettings {
-                metric: bevy_perf_hud::MetricSettings {
-                    id: "game/players".to_string(),
-                    ..default()
-                },
-                color: Color::srgb(0.2, 0.8, 0.2),
-                ..default()
-            });
-            settings.bars.bars.push(bevy_perf_hud::BarSettings {
-                metric: bevy_perf_hud::MetricSettings {
-                    id: "net/packets_sec".to_string(),
-                    ..default()
-                },
-                max_value: 1000.0,
-                ..default()
-            });
-            settings
-        })
         .add_plugins(bevy_perf_hud::BevyPerfHudPlugin)
-        .add_perf_metric_provider(PlayerCountProvider)
-        .add_perf_metric_provider(NetworkThroughputProvider)
-        .add_systems(Update, update_game_stats)
+        .add_perf_metric_provider(FrameCounter::default())
+        .add_systems(Startup, setup_custom_metrics)
         .run();
 }
-
-// 更新自定义指标数据的系统
-fn update_game_stats(
-    mut stats: ResMut<GameStats>,
-    time: Res<Time>,
-    // 你的实际游戏系统将提供真实数据
-) {
-    let now = time.elapsed_secs_f64();
-    if now - stats.last_update > 1.0 {
-        // 模拟一些真实的游戏数据
-        stats.active_players = (20.0 + 10.0 * (now * 0.1).sin()) as u32;
-
-        let pps = (500.0 + 200.0 * (now * 0.05).cos()) as u32;
-        stats.packets_per_second.push_back(pps);
-        if stats.packets_per_second.len() > 60 {
-            stats.packets_per_second.pop_front();
-        }
-
-        stats.last_update = now;
-    }
-}
 ```
+
+### 自定义指标如何工作
+
+当你调用 `add_perf_metric_provider()` 时：
+
+1. **组件生成**：提供器作为 `ProviderComponent<P>` 存储在实体上
+2. **类型注册**：提供器类型在 `ProviderRegistry` 中注册
+3. **采样系统注册**：为此提供器类型自动添加专用的泛型采样系统
+4. **高效采样**：在运行时，泛型系统查询所有 `ProviderComponent<P>` 实体并采样，没有动态分派开销
+5. **值存储**：采样值存储在 `SampledValues` 组件中，供 HUD 渲染系统使用
 
 ### 自定义指标指南
 

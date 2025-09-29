@@ -307,6 +307,12 @@ impl PerfHudAppExt for App {
             .resource_mut::<ProviderRegistry>()
             .register::<P>(metric_id);
 
+        // Add the sampling system for this provider type
+        self.add_systems(
+            bevy::app::Update,
+            sample_provider_type::<P>
+        );
+
         // Keep backward compatibility with the old system for now
         // Store the provider in the legacy system as well
         self.init_resource::<MetricProviders>();
