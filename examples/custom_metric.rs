@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BarConfig, BarScaleMode, BevyPerfHudPlugin, CurveConfig, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfMetricProvider, create_hud, GraphConfig, BarsConfig, MetricRegistry
+    PerfHudAppExt, PerfMetricProvider, create_hud, GraphConfig, MetricRegistry
 };
 
 const CUSTOM_METRIC_ID: &str = "custom/network_latency_ms";
@@ -45,9 +45,8 @@ impl PerfMetricProvider for NetworkLatencyMetric {
     }
 }
 
-// Function to apply custom metric configuration to the HUD
 fn apply_custom_metric_config(
-    mut hud_query: Query<(&mut GraphConfig, &mut BarsConfig)>,
+    mut graph_config_query: Query<&mut GraphConfig>,
     mut commands: Commands,
     mut metric_registry: ResMut<MetricRegistry>,
 ) {
@@ -63,10 +62,10 @@ fn apply_custom_metric_config(
     // Register the metric definition
     metric_registry.register(latency_metric.clone());
 
-    // Spawn metric definition as component
+    // Spawn the metric definition as component
     commands.spawn(latency_metric.clone());
 
-    let Ok((mut graph_config, mut bars_config)) = hud_query.single_mut() else {
+    let Ok(mut graph_config) = graph_config_query.single_mut() else {
         return;
     };
 
@@ -79,10 +78,9 @@ fn apply_custom_metric_config(
         quantize_step: Some(0.5),
     });
 
-    // Add custom latency metric with percentile scaling
+    // Add a separate entity for the custom latency bar configuration with percentile scaling
     // Percentile mode is perfect for latency as it handles spikes gracefully
-    bars_config.bars.insert(
-        0,
+    commands.spawn((
         BarConfig {
             metric_id: latency_metric.id.clone(),
             show_value: Some(true),
@@ -95,23 +93,31 @@ fn apply_custom_metric_config(
             },
             min_limit: Some(0.0),    // Hard minimum (latency can't be negative)
             max_limit: Some(1000.0), // Hard maximum (cap extreme outliers)
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
         },
-    );
+        latency_metric.clone(), // Also attach the metric definition to the same entity
+    ));
 
-    // Also modify the entity count bar to use auto-scaling for better demo
-    if let Some(entity_bar) = bars_config
-        .bars
-        .iter_mut()
-        .find(|bar| bar.metric_id == "entity_count")
-    {
-        entity_bar.scale_mode = BarScaleMode::Auto {
-            smoothing: 0.7,   // Moderately smooth transitions
-            min_span: 50.0,   // Minimum range of 50 entities
-            margin_frac: 0.2, // 20% margin for headroom
-        };
-        entity_bar.min_limit = Some(0.0); // Can't be negative
-        entity_bar.max_limit = Some(100000.0); // Reasonable upper bound
-        entity_bar.show_value = Some(true); // Show actual count
+    // To modify the entity count bar, we need to spawn a new BarConfig with updated values
+    // Since there's no direct access to the existing bar config, we'll add a modified version
+    if let Some(entity_count_metric) = metric_registry.get("entity_count").cloned() {
+        commands.spawn((
+            BarConfig {
+                metric_id: "entity_count".into(),
+                show_value: Some(true), // Show actual count
+                min_value: 0.0,
+                max_value: 10000.0, // Entity count range - fallback values
+                scale_mode: BarScaleMode::Auto {
+                    smoothing: 0.7,   // Moderately smooth transitions
+                    min_span: 50.0,   // Minimum range of 50 entities
+                    margin_frac: 0.2, // 20% margin for headroom
+                },
+                min_limit: Some(0.0),     // Entities can't be negative
+                max_limit: Some(100000.0), // Reasonable upper bound
+                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
+            },
+            entity_count_metric, // Get the existing entity count metric definition
+        ));
     }
 }
 

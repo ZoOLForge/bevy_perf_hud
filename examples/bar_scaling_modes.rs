@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleMode, BarScaleStates, BarsConfig, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues, MetricRegistry};
+use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleMode, BarScaleStates, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues, MetricRegistry};
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
 fn main() {
@@ -24,9 +24,6 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         ..default()
     });
 
-    // Get the bars configuration from the default and customize it
-    let mut bars_config = BarsConfig::default();
-    
     // Configure custom bars with different scaling modes for the demo
     let fixed_mode_metric = MetricDefinition {
         id: "variable/cpu_load".into(),
@@ -62,9 +59,9 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     commands.spawn(auto_mode_metric.clone());
     commands.spawn(percentile_mode_metric.clone());
 
-    // Configure bars with different scaling modes
-    bars_config.bars = vec![
-        // Fixed mode bar - traditional static range
+    // Spawn individual BarConfig entities for each bar with different scaling modes
+    // Fixed mode bar - traditional static range
+    commands.spawn((
         BarConfig {
             metric_id: "variable/cpu_load".into(),
             show_value: Some(true),
@@ -73,8 +70,13 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
             scale_mode: BarScaleMode::Fixed,
             min_limit: None,
             max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
         },
-        // Auto mode bar - adapts to data range with smoothing
+        fixed_mode_metric.clone(), // Attach the metric definition to the same entity
+    ));
+    
+    // Auto mode bar - adapts to data range with smoothing
+    commands.spawn((
         BarConfig {
             metric_id: "variable/memory_usage".into(),
             show_value: Some(true),
@@ -87,8 +89,13 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
             },
             min_limit: Some(0.0),    // Hard minimum limit
             max_limit: Some(2500.0), // Hard maximum limit
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
         },
-        // Percentile mode bar - uses P5 to P95 range, good for spiky data
+        auto_mode_metric.clone(), // Attach the metric definition to the same entity
+    ));
+    
+    // Percentile mode bar - uses P5 to P95 range, good for spiky data
+    commands.spawn((
         BarConfig {
             metric_id: "spiky/latency".into(),
             show_value: Some(true),
@@ -101,10 +108,12 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
             },
             min_limit: Some(0.0),    // Hard minimum limit
             max_limit: Some(1000.0), // Hard maximum limit
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
         },
-    ];
+        percentile_mode_metric.clone(), // Attach the metric definition to the same entity
+    ));
 
-    // Spawn root UI node with customized settings as components
+    // Spawn root UI node without BarsConfig (it's been removed)
     let root = commands
         .spawn((
             Node {
@@ -114,7 +123,6 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            bars_config.clone(),  // Use the customized config instead of default
             BarsHandles::default(),
             SampledValues::default(),
             BarScaleStates::default(),
@@ -122,140 +130,47 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         .id();
     commands.entity(root).insert(Visibility::Visible);
 
-    // Bars container
-    let mut bars_root_opt: Option<Entity> = None;
-    let mut bar_entities = Vec::new();
-    let mut bar_materials = Vec::new();
-    let mut bar_labels = Vec::new();
+    // Bars container - create a basic UI structure for bars
+    // The actual bars will be handled by the systems using individual BarConfig components
+    let column_count = 2;
+    let default_width = 300.0; // Use a default width for bars-only layout
+    let column_width = (default_width - 12.0) / column_count as f32;
 
-    if !bars_config.bars.is_empty() {
-        let column_count = 2;
-        let default_width = 300.0; // Use a default width for bars-only layout
-        let column_width = (default_width - 12.0) / column_count as f32;
-
-        let bars_root = commands
-            .spawn((Node {
-                width: Val::Px(default_width),
-                height: Val::Px(
-                    (bars_config.bars.len() as f32 / column_count as f32).ceil() * 25.0,
-                ),
-                flex_direction: FlexDirection::Column,
-                margin: UiRect {
-                    left: Val::Px(0.0), // No left margin for bars-only layout
-                    top: Val::Px(4.0),
-                    ..default()
-                },
+    let bars_root = commands
+        .spawn((Node {
+            width: Val::Px(default_width),
+            height: Val::Px(100.0), // Start with a reasonable height
+            flex_direction: FlexDirection::Column,
+            margin: UiRect {
+                left: Val::Px(0.0), // No left margin for bars-only layout
+                top: Val::Px(4.0),
                 ..default()
-            },))
-            .id();
-        commands.entity(bars_root).insert(ChildOf(root));
-        commands
-            .entity(bars_root)
-            .insert(if !bars_config.bars.is_empty() {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            });
-        bars_root_opt = Some(bars_root);
+            },
+            ..default()
+        },))
+        .id();
+    commands.entity(bars_root).insert(ChildOf(root));
+    commands.entity(bars_root).insert(Visibility::Visible);
 
-        for chunk in bars_config.bars.chunks(column_count) {
-            let row = commands
-                .spawn((Node {
-                    width: Val::Px(default_width),
-                    height: Val::Px(24.0),
-                    flex_direction: FlexDirection::Row,
-                    margin: UiRect {
-                        top: Val::Px(1.0),
-                        ..default()
-                    },
-                    ..default()
-                },))
-                .id();
-            commands.entity(row).insert(ChildOf(bars_root));
-
-            for (col_idx, bar_cfg) in chunk.iter().enumerate() {
-                let metric_def = metric_registry.get(&bar_cfg.metric_id);
-                let base_label = metric_def
-                    .and_then(|m| m.label.clone())
-                    .unwrap_or_else(|| bar_cfg.metric_id.clone());
-
-                let column = commands
-                    .spawn((Node {
-                        width: Val::Px(column_width),
-                        height: Val::Px(24.0),
-                        margin: UiRect {
-                            right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
-                                Val::Px(0.0)
-                            } else {
-                                Val::Px(8.0)
-                            },
-                            ..default()
-                        },
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },))
-                    .id();
-                commands.entity(column).insert(ChildOf(row));
-
-                let color = metric_def.map(|m| m.color).unwrap_or(Color::WHITE);
-                let mat = bar_mats.add(BarMaterial {
-                    params: BarParams {
-                        value: 0.0,
-                        r: color.to_linear().to_vec4().x,
-                        g: color.to_linear().to_vec4().y,
-                        b: color.to_linear().to_vec4().z,
-                        a: color.to_linear().to_vec4().w,
-                        bg_r: bars_config.bg_color.to_linear().to_vec4().x,
-                        bg_g: bars_config.bg_color.to_linear().to_vec4().y,
-                        bg_b: bars_config.bg_color.to_linear().to_vec4().z,
-                        bg_a: bars_config.bg_color.to_linear().to_vec4().w,
-                    },
-                });
-
-                let bar_entity = commands
-                    .spawn((
-                        MaterialNode(mat.clone()),
-                        Node {
-                            width: Val::Px(column_width),
-                            height: Val::Px(20.0),
-                            ..default()
-                        },
-                    ))
-                    .id();
-                commands.entity(bar_entity).insert(ChildOf(column));
-
-                let bar_label = commands
-                    .spawn((
-                        Text::new(base_label),
-                        TextColor(Color::WHITE),
-                        TextFont {
-                            font_size: 10.0,
-                            ..default()
-                        },
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: Val::Px(6.0),
-                            top: Val::Px(5.0),
-                            width: Val::Px(column_width - 12.0),
-                            overflow: Overflow::hidden(),
-                            ..default()
-                        },
-                    ))
-                    .id();
-                commands.entity(bar_label).insert(ChildOf(bar_entity));
-
-                bar_entities.push(bar_entity);
-                bar_materials.push(mat);
-                bar_labels.push(bar_label);
-            }
-        }
-    }
+    let row = commands
+        .spawn((Node {
+            width: Val::Px(default_width),
+            height: Val::Px(24.0),
+            flex_direction: FlexDirection::Row,
+            margin: UiRect {
+                top: Val::Px(1.0),
+                ..default()
+            },
+            ..default()
+        },))
+        .id();
+    commands.entity(row).insert(ChildOf(bars_root));
 
     // Update the BarsHandles component on the root entity
     commands.entity(root).insert(BarsHandles {
-        bars_root: bars_root_opt,
-        bar_materials,
-        bar_labels,
+        bars_root: Some(bars_root),
+        bar_materials: Vec::new(), // Will be populated by systems
+        bar_labels: Vec::new(),    // Will be populated by systems
     });
 }
 
@@ -264,13 +179,15 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
 /// Simulates keyboard input for controlling the demo
 fn simulate_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut commands: Commands,
-    bars_config_query: Query<Entity, With<BarsConfig>>,
+    mut bars_handles_query: Query<&mut Visibility, With<BarsHandles>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        if let Ok(entity) = bars_config_query.single() {
-            // Toggle bars visibility by removing/adding the component
-            commands.entity(entity).remove::<BarsConfig>();
+        if let Ok(mut visibility) = bars_handles_query.get_single_mut() {
+            *visibility = if *visibility == Visibility::Visible {
+                Visibility::Hidden
+            } else {
+                Visibility::Visible
+            };
         }
     }
 }

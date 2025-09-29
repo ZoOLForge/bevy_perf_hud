@@ -487,7 +487,7 @@ impl Default for BarScaleMode {
 /// Configuration for a single performance bar.
 ///
 /// Each bar represents one metric displayed as a horizontal progress indicator.
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct BarConfig {
     /// ID of the metric this bar represents (must reference a MetricDefinition component)
     pub metric_id: String,
@@ -503,18 +503,21 @@ pub struct BarConfig {
     pub min_limit: Option<f32>,
     /// Hard maximum limit (values above this are clamped) - optional override
     pub max_limit: Option<f32>,
+    /// Background color for this bar (supports transparency)
+    pub bg_color: Color,
 }
 
 impl Default for BarConfig {
     fn default() -> Self {
         Self {
             metric_id: "default".to_owned(),
-            show_value: None,
+            show_value: Some(true),
             min_value: 0.0,
             max_value: 100.0,
             scale_mode: BarScaleMode::Fixed,
             min_limit: None,
             max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
         }
     }
 }
@@ -637,19 +640,7 @@ pub struct GraphSettings {
     pub y_scale_smoothing: f32,
 }
 
-/// Configuration for the performance bars display.
-///
-/// Performance bars show current metric values as horizontal progress bars,
-/// useful for displaying things like CPU usage, memory usage, etc.
-#[derive(Debug, Clone)]
-pub struct BarsSettings {
-    /// List of bars (metrics) to display
-    pub bars: Vec<BarConfig>,
-    /// Background color for all bars (supports transparency)
-    pub bg_color: Color,
-    /// Default setting for whether bars should show their numeric values
-    pub show_value_default: bool,
-}
+
 
 impl GraphSettings {
     /// Convert GraphSettings to MultiLineGraphParams with initial values
@@ -734,47 +725,7 @@ impl Default for GraphSettings {
     }
 }
 
-impl Default for BarsSettings {
-    fn default() -> Self {
-        Self {
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-            show_value_default: true,
-            bars: vec![
-                BarConfig {
-                    metric_id: SYSTEM_CPU_USAGE_ID.to_owned(),
-                    show_value: Some(false),
-                    min_value: 0.0,
-                    max_value: 100.0,                // CPU usage percentage
-                    scale_mode: BarScaleMode::Fixed, // Keep fixed for CPU % (known 0-100% range)
-                    min_limit: None,
-                    max_limit: None,
-                },
-                BarConfig {
-                    metric_id: SYSTEM_MEM_USAGE_ID.to_owned(),
-                    show_value: Some(false),
-                    min_value: 0.0,
-                    max_value: 100.0,                // Memory usage percentage
-                    scale_mode: BarScaleMode::Fixed, // Keep fixed for memory % (known 0-100% range)
-                    min_limit: None,
-                    max_limit: None,
-                },
-                BarConfig {
-                    metric_id: "entity_count".into(),
-                    show_value: None,
-                    min_value: 0.0,
-                    max_value: 10000.0, // Entity count range - fallback values
-                    scale_mode: BarScaleMode::Auto {
-                        smoothing: 0.85,  // Smooth transitions for entity count changes
-                        min_span: 50.0,   // Minimum range of 50 entities
-                        margin_frac: 0.2, // 20% margin for growth headroom
-                    },
-                    min_limit: Some(0.0),     // Entities can't be negative
-                    max_limit: Some(50000.0), // Cap at reasonable maximum
-                },
-            ],
-        }
-    }
-}
+
 
 // ============================================================================
 // Component Types (formerly from hud_settings_components.rs)
@@ -862,57 +813,7 @@ impl Default for GraphConfig {
 }
 
 /// Component storing configuration for the performance bars display.
-#[derive(Component, Debug, Clone)]
-pub struct BarsConfig {
-    /// List of bars (metrics) to display
-    pub bars: Vec<BarConfig>,
-    /// Background color for all bars (supports transparency)
-    pub bg_color: Color,
-    /// Default setting for whether bars should show their numeric values
-    pub show_value_default: bool,
-}
 
-impl Default for BarsConfig {
-    fn default() -> Self {
-        Self {
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-            show_value_default: true,
-            bars: vec![
-                BarConfig {
-                    metric_id: SYSTEM_CPU_USAGE_ID.to_owned(),
-                    show_value: Some(false),
-                    min_value: 0.0,
-                    max_value: 100.0,                // CPU usage percentage
-                    scale_mode: BarScaleMode::Fixed, // Keep fixed for CPU % (known 0-100% range)
-                    min_limit: None,
-                    max_limit: None,
-                },
-                BarConfig {
-                    metric_id: SYSTEM_MEM_USAGE_ID.to_owned(),
-                    show_value: Some(false),
-                    min_value: 0.0,
-                    max_value: 100.0,                // Memory usage percentage
-                    scale_mode: BarScaleMode::Fixed, // Keep fixed for memory % (known 0-100% range)
-                    min_limit: None,
-                    max_limit: None,
-                },
-                BarConfig {
-                    metric_id: "entity_count".into(),
-                    show_value: None,
-                    min_value: 0.0,
-                    max_value: 10000.0, // Entity count range - fallback values
-                    scale_mode: BarScaleMode::Auto {
-                        smoothing: 0.85,  // Smooth transitions for entity count changes
-                        min_span: 50.0,   // Minimum range of 50 entities
-                        margin_frac: 0.2, // 20% margin for growth headroom
-                    },
-                    min_limit: Some(0.0),     // Entities can't be negative
-                    max_limit: Some(50000.0), // Cap at reasonable maximum
-                },
-            ],
-        }
-    }
-}
 
 /// Component storing dynamic scaling states for all performance bars.
 /// Maps from metric ID to its scaling state

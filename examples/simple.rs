@@ -1,7 +1,7 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    create_hud, BarsConfig, BevyPerfHudPlugin, HudHandles,
+    create_hud, BevyPerfHudPlugin, HudHandles,
     BarConfig, BarScaleMode, MetricDefinition, MetricRegistry
 };
 
@@ -306,29 +306,9 @@ fn toggle_hud_mode_on_f1(
 }
 
 fn apply_custom_hud_settings(
-    mut hud_query: Query<(&mut BarsConfig,), With<HudHandles>>, // Get the HUD components
     mut commands: Commands,
     mut metric_registry: ResMut<MetricRegistry>,
 ) {
-    let Ok((mut bars_config,)) = hud_query.single_mut() else {
-        return;
-    };
-
-    // Customize the entity count bar to use auto-scaling
-    // since entity count varies dramatically in this demo
-    if let Some(entity_bar) = bars_config
-        .bars
-        .iter_mut()
-        .find(|bar| bar.metric_id == "entity_count")
-    {
-        entity_bar.scale_mode = BarScaleMode::Auto {
-            smoothing: 0.8,    // Smooth scaling changes
-            min_span: 100.0,   // Minimum range of 100 entities
-            margin_frac: 0.25, // 25% headroom for spawning bursts
-        };
-        entity_bar.show_value = Some(true); // Show actual entity count
-    }
-
     // Register FPS metric definition
     let fps_metric = MetricDefinition {
         id: "fps".into(),
@@ -340,11 +320,10 @@ fn apply_custom_hud_settings(
     metric_registry.register(fps_metric.clone());
 
     // Spawn FPS metric definition as component
-    commands.spawn(fps_metric);
+    commands.spawn(fps_metric.clone());
 
     // Add FPS bar with percentile scaling to handle frame spikes
-    bars_config.bars.insert(
-        0,
+    commands.spawn((
         BarConfig {
             metric_id: "fps".into(),
             show_value: Some(true),
@@ -357,8 +336,33 @@ fn apply_custom_hud_settings(
             },
             min_limit: Some(0.0),   // FPS can't be negative
             max_limit: Some(300.0), // Cap at reasonable maximum
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
         },
-    );
+        fps_metric, // Attach the metric definition to the same entity
+    ));
+
+    // Customize the entity count bar to use auto-scaling
+    // since entity count varies dramatically in this demo
+    // We'll create a new entity with the updated configuration
+    if let Some(entity_count_metric) = metric_registry.get("entity_count").cloned() {
+        commands.spawn((
+            BarConfig {
+                metric_id: "entity_count".into(),
+                show_value: Some(true), // Show actual entity count
+                min_value: 0.0,
+                max_value: 10000.0, // Entity count range - fallback values
+                scale_mode: BarScaleMode::Auto {
+                    smoothing: 0.8,    // Smooth scaling changes
+                    min_span: 100.0,   // Minimum range of 100 entities
+                    margin_frac: 0.25, // 25% headroom for spawning bursts
+                },
+                min_limit: Some(0.0),     // Can't be negative
+                max_limit: Some(50000.0), // Reasonable upper bound
+                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
+            },
+            entity_count_metric, // Attach the metric definition to the same entity
+        ));
+    }
 }
 
 fn main() {

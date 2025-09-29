@@ -18,7 +18,7 @@ use bevy::{
 };
 
 use crate::{
-    components::{BarsConfig, GraphConfig, MetricRegistry},
+    components::{BarConfig, GraphConfig, MetricRegistry, MetricDefinition},
     constants::*,
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
@@ -53,7 +53,6 @@ pub fn create_hud(
                 ..default()
             },
             GraphConfig::default(),
-            BarsConfig::default(),
             HudHandles::default(),
             SampledValues::default(),
             HistoryBuffers::default(),
@@ -63,9 +62,8 @@ pub fn create_hud(
         .id();
     commands.entity(root).insert(Visibility::Visible);
 
-    // Get the graph and bars configurations from the root entity
+    // Get the graph configuration from the root entity
     let graph_config = GraphConfig::default();
-    let bars_config = BarsConfig::default();
 
     // Graph material and node (optional)
     #[allow(unused_assignments)]
@@ -173,137 +171,47 @@ pub fn create_hud(
         graph_handle_opt = Some(gh);
     }
 
-    // Bars container placed below the graph
     let mut bars_root_opt: Option<Entity> = None;
-    let mut bar_entities = Vec::new();
-    let mut bar_materials = Vec::new();
-    let mut bar_labels = Vec::new();
-    if !bars_config.bars.is_empty() {
-        let column_count = 2;
-        let column_width = (graph_config.size.x - 12.0) / column_count as f32;
+    let mut bar_entities: Vec<Entity> = Vec::new();
+    let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
+    let mut bar_labels: Vec<Entity> = Vec::new();
+    
+    // Bars container placed below the graph (empty for now, bars will be created dynamically)
+    // We'll set up a container for bars even if there are no default bars initially
+    let column_count = 2;
+    let column_width = (graph_config.size.x - 12.0) / column_count as f32;
 
-        let bars_root = commands
-            .spawn((Node {
-                width: Val::Px(graph_config.size.x),
-                height: Val::Px(
-                    (bars_config.bars.len() as f32 / column_count as f32).ceil() * 25.0,
-                ),
-                flex_direction: FlexDirection::Column,
-                margin: UiRect {
-                    left: Val::Px(graph_config.label_width.max(40.0)),
-                    top: Val::Px(4.0),
-                    ..default()
-                },
+    let bars_root = commands
+        .spawn((Node {
+            width: Val::Px(graph_config.size.x),
+            height: Val::Px(1.0), // Start with minimal height, will be set dynamically
+            flex_direction: FlexDirection::Column,
+            margin: UiRect {
+                left: Val::Px(graph_config.label_width.max(40.0)),
+                top: Val::Px(4.0),
                 ..default()
-            },))
-            .id();
-        commands.entity(bars_root).insert(ChildOf(root));
-        commands
-            .entity(bars_root)
-            .insert(if !bars_config.bars.is_empty() {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            });
-        bars_root_opt = Some(bars_root);
+            },
+            ..default()
+        },))
+        .id();
+    commands.entity(bars_root).insert(ChildOf(root));
+    commands.entity(bars_root).insert(Visibility::Visible);
+    bars_root_opt = Some(bars_root);
 
-        for chunk in bars_config.bars.chunks(column_count) {
-            let row = commands
-                .spawn((Node {
-                    width: Val::Px(graph_config.size.x),
-                    height: Val::Px(24.0),
-                    flex_direction: FlexDirection::Row,
-                    margin: UiRect {
-                        top: Val::Px(1.0),
-                        ..default()
-                    },
-                    ..default()
-                },))
-                .id();
-            commands.entity(row).insert(ChildOf(bars_root));
-
-            for (col_idx, bar_cfg) in chunk.iter().enumerate() {
-                let base_label = if let Some(metric_def) = metric_registry.get(&bar_cfg.metric_id) {
-                    metric_def.label.clone().unwrap_or_else(|| bar_cfg.metric_id.clone())
-                } else {
-                    bar_cfg.metric_id.clone()
-                };
-
-                let column = commands
-                    .spawn((Node {
-                        width: Val::Px(column_width),
-                        height: Val::Px(24.0),
-                        margin: UiRect {
-                            right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
-                                Val::Px(0.0)
-                            } else {
-                                Val::Px(8.0)
-                            },
-                            ..default()
-                        },
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },))
-                    .id();
-                commands.entity(column).insert(ChildOf(row));
-
-                let color = if let Some(metric_def) = metric_registry.get(&bar_cfg.metric_id) {
-                    metric_def.color.to_linear().to_vec4()
-                } else {
-                    bevy::color::Color::WHITE.to_linear().to_vec4()
-                };
-                let mat = bar_mats.add(BarMaterial {
-                    params: BarParams {
-                        value: 0.0,
-                        r: color.x,
-                        g: color.y,
-                        b: color.z,
-                        a: color.w,
-                        bg_r: bars_config.bg_color.to_linear().to_vec4().x,
-                        bg_g: bars_config.bg_color.to_linear().to_vec4().y,
-                        bg_b: bars_config.bg_color.to_linear().to_vec4().z,
-                        bg_a: bars_config.bg_color.to_linear().to_vec4().w,
-                    },
-                });
-
-                let bar_entity = commands
-                    .spawn((
-                        MaterialNode(mat.clone()),
-                        Node {
-                            width: Val::Px(column_width),
-                            height: Val::Px(20.0),
-                            ..default()
-                        },
-                    ))
-                    .id();
-                commands.entity(bar_entity).insert(ChildOf(column));
-
-                let bar_label = commands
-                    .spawn((
-                        Text::new(base_label),
-                        TextColor(Color::WHITE),
-                        TextFont {
-                            font_size: 10.0,
-                            ..default()
-                        },
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: Val::Px(6.0),
-                            top: Val::Px(5.0),
-                            width: Val::Px(column_width - 12.0),
-                            overflow: Overflow::hidden(),
-                            ..default()
-                        },
-                    ))
-                    .id();
-                commands.entity(bar_label).insert(ChildOf(bar_entity));
-
-                bar_entities.push(bar_entity);
-                bar_materials.push(mat);
-                bar_labels.push(bar_label);
-            }
-        }
-    }
+    // Create a row for the bars (will be populated with bar components separately)
+    let row = commands
+        .spawn((Node {
+            width: Val::Px(graph_config.size.x),
+            height: Val::Px(24.0),
+            flex_direction: FlexDirection::Row,
+            margin: UiRect {
+                top: Val::Px(1.0),
+                ..default()
+            },
+            ..default()
+        },))
+        .id();
+    commands.entity(row).insert(ChildOf(bars_root));
 
     // Update the Node position using the origin component - this part is tricky because Commands
     // don't allow direct access to components on the same frame they're created
@@ -507,13 +415,13 @@ pub fn sample_diagnostics(
 pub fn update_graph_and_bars(
     mut hud_query: Query<(
         &GraphConfig,
-        &BarsConfig,
         &mut HudHandles,
         &mut SampledValues,
         &mut HistoryBuffers,
         &mut GraphScaleState,
         &mut crate::BarScaleStates,
     )>,
+    mut bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     _label_node_q: Query<&mut Node>,
@@ -523,7 +431,6 @@ pub fn update_graph_and_bars(
 ) {
     let Ok((
         graph_config,
-        bars_config,
         h,
         samples,
         mut history,
@@ -783,25 +690,26 @@ pub fn update_graph_and_bars(
 
     // Update bars (when enabled)
     {
-        for (i, cfg) in bars_config.bars.iter().enumerate() {
-            if i >= h.bar_materials.len() {
+        let mut bar_index = 0;
+        for (bar_config, metric_definition) in bar_config_query.iter() {
+            if bar_index >= h.bar_materials.len() {
                 break;
             }
-            let val = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
+            let val = samples.get(&bar_config.metric_id).unwrap_or(0.0);
 
             // Get or create the scale state for this bar
-            let scale_state = bar_scale_states.get_or_create(&cfg.metric_id);
+            let scale_state = bar_scale_states.get_or_create(&bar_config.metric_id);
 
             // Add current value to the scale state's history
             scale_state.add_sample(val);
 
             // Calculate the dynamic range based on the bar's scale mode
             let (range_min, range_max) = scale_state.calculate_range(
-                &cfg.scale_mode,
-                cfg.min_value,
-                cfg.max_value,
-                cfg.min_limit,
-                cfg.max_limit,
+                &bar_config.scale_mode,
+                bar_config.min_value,
+                bar_config.max_value,
+                bar_config.min_limit,
+                bar_config.max_limit,
             );
 
             // Normalize the value using the calculated range
@@ -811,14 +719,14 @@ pub fn update_graph_and_bars(
                 0.0
             };
 
-            if let Some(mat) = bar_mats.get_mut(&h.bar_materials[i]) {
+            if let Some(mat) = bar_mats.get_mut(&h.bar_materials[bar_index]) {
                 mat.params.value = norm;
-                let v = metric_registry.get(&cfg.metric_id).map(|d| d.color).unwrap_or(bevy::color::Color::WHITE).to_linear().to_vec4();
+                let v = metric_definition.color.to_linear().to_vec4();
                 mat.params.r = v.x;
                 mat.params.g = v.y;
                 mat.params.b = v.z;
                 mat.params.a = v.w;
-                let bg = bars_config.bg_color.to_linear().to_vec4();
+                let bg = bar_config.bg_color.to_linear().to_vec4();
                 mat.params.bg_r = bg.x;
                 mat.params.bg_g = bg.y;
                 mat.params.bg_b = bg.z;
@@ -826,20 +734,20 @@ pub fn update_graph_and_bars(
             }
 
             // Update bar labels with current values and formatting
-            if let Some(&label_entity) = h.bar_labels.get(i) {
-                let definition = metric_registry.get(&cfg.metric_id);
-                let base_label = definition
-                    .and_then(|d| d.label.clone())
-                    .unwrap_or_else(|| cfg.metric_id.clone());
-                let precision = definition.map(|d| d.precision).unwrap_or(2) as usize;
-                let unit = definition.and_then(|d| d.unit.as_deref()).unwrap_or("");
+            if let Some(&label_entity) = h.bar_labels.get(bar_index) {
+                let base_label = metric_definition
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| bar_config.metric_id.clone());
+                let precision = metric_definition.precision as usize;
+                let unit = metric_definition.unit.as_deref().unwrap_or("");
 
                 let formatted = if precision == 0 {
                     format!("{val:.0}")
                 } else {
                     format!("{val:.precision$}", precision = precision)
                 };
-                let show_value = cfg.show_value.unwrap_or(bars_config.show_value_default);
+                let show_value = bar_config.show_value.unwrap_or(true);
                 let display_text = if show_value {
                     let value_text = if unit.is_empty() {
                         formatted
@@ -860,6 +768,8 @@ pub fn update_graph_and_bars(
                     *col = TextColor(Color::WHITE);
                 }
             }
+
+            bar_index += 1;
         }
     }
 }
@@ -1127,102 +1037,111 @@ pub fn update_graph(
 }
 
 /// System that updates only the bars display with current performance data.
-/// Uses entities with BarsConfig and BarsHandles components.
+/// Uses entities with BarConfig and BarsHandles components.
 #[allow(clippy::too_many_arguments)]
 pub fn update_bars(
-    mut bars_query: Query<(
-        &BarsConfig,
-        &mut BarsHandles,
-        &mut SampledValues,
-        &mut crate::BarScaleStates,
-    )>,
+    mut bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
+    mut bars_handles_query: Query<&mut BarsHandles>,
+    mut sampled_values_query: Query<&mut SampledValues>,
+    mut bar_scale_states_query: Query<&mut crate::BarScaleStates>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
     metric_registry: Res<MetricRegistry>,
 ) {
-    for (bars_config, h, samples, mut bar_scale_states) in bars_query.iter_mut() {
-        // Update bars (when enabled)
-        {
-            for (i, cfg) in bars_config.bars.iter().enumerate() {
-                if i >= h.bar_materials.len() {
-                    break;
-                }
-                let val = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
+    // Get global resources/components that are shared across all bars
+    let Ok(mut samples) = sampled_values_query.get_single_mut() else {
+        return;
+    };
+    let Ok(mut bar_scale_states) = bar_scale_states_query.get_single_mut() else {
+        return;
+    };
+    let Ok(mut h) = bars_handles_query.get_single_mut() else {
+        return;
+    };
 
-                // Get or create the scale state for this bar
-                let scale_state = bar_scale_states.get_or_create(&cfg.metric_id);
+    // Update bars (when enabled)
+    let mut bar_index = 0;
+    for (bar_config, metric_definition) in bar_config_query.iter() {
+        if bar_index >= h.bar_materials.len() {
+            break;
+        }
+        
+        let val = samples.get(&bar_config.metric_id).unwrap_or(0.0);
 
-                // Add current value to the scale state's history
-                scale_state.add_sample(val);
+        // Get or create the scale state for this bar
+        let scale_state = bar_scale_states.get_or_create(&bar_config.metric_id);
 
-                // Calculate the dynamic range based on the bar's scale mode
-                let (range_min, range_max) = scale_state.calculate_range(
-                    &cfg.scale_mode,
-                    cfg.min_value,
-                    cfg.max_value,
-                    cfg.min_limit,
-                    cfg.max_limit,
-                );
+        // Add current value to the scale state's history
+        scale_state.add_sample(val);
 
-                // Normalize the value using the calculated range
-                let norm = if range_max > range_min {
-                    ((val - range_min) / (range_max - range_min)).clamp(0.0, 1.0)
+        // Calculate the dynamic range based on the bar's scale mode
+        let (range_min, range_max) = scale_state.calculate_range(
+            &bar_config.scale_mode,
+            bar_config.min_value,
+            bar_config.max_value,
+            bar_config.min_limit,
+            bar_config.max_limit,
+        );
+
+        // Normalize the value using the calculated range
+        let norm = if range_max > range_min {
+            ((val - range_min) / (range_max - range_min)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+
+        if let Some(mat) = bar_mats.get_mut(&h.bar_materials[bar_index]) {
+            mat.params.value = norm;
+            let v = metric_definition.color.to_linear().to_vec4();
+            mat.params.r = v.x;
+            mat.params.g = v.y;
+            mat.params.b = v.z;
+            mat.params.a = v.w;
+            let bg = bar_config.bg_color.to_linear().to_vec4();
+            mat.params.bg_r = bg.x;
+            mat.params.bg_g = bg.y;
+            mat.params.bg_b = bg.z;
+            mat.params.bg_a = bg.w;
+        }
+
+        // Update bar labels with current values and formatting
+        if let Some(&label_entity) = h.bar_labels.get(bar_index) {
+            let base_label = metric_definition
+                .label
+                .clone()
+                .unwrap_or_else(|| bar_config.metric_id.clone());
+            let precision = metric_definition.precision as usize;
+            let unit = metric_definition.unit.as_deref().unwrap_or("");
+
+            let formatted = if precision == 0 {
+                format!("{val:.0}")
+            } else {
+                format!("{val:.precision$}", precision = precision)
+            };
+            let show_value = bar_config.show_value.unwrap_or(true);
+            let display_text = if show_value {
+                let value_text = if unit.is_empty() {
+                    formatted
                 } else {
-                    0.0
+                    format!("{formatted}{unit}")
                 };
+                format!("{} {}", base_label, value_text)
+            } else {
+                base_label.clone()
+            };
 
-                if let Some(mat) = bar_mats.get_mut(&h.bar_materials[i]) {
-                    mat.params.value = norm;
-                    let v = metric_registry.get(&cfg.metric_id).map(|d| d.color).unwrap_or(bevy::color::Color::WHITE).to_linear().to_vec4();
-                    mat.params.r = v.x;
-                    mat.params.g = v.y;
-                    mat.params.b = v.z;
-                    mat.params.a = v.w;
-                    let bg = bars_config.bg_color.to_linear().to_vec4();
-                    mat.params.bg_r = bg.x;
-                    mat.params.bg_g = bg.y;
-                    mat.params.bg_b = bg.z;
-                    mat.params.bg_a = bg.w;
-                }
-
-                // Update bar labels with current values and formatting
-                if let Some(&label_entity) = h.bar_labels.get(i) {
-                    let definition = metric_registry.get(&cfg.metric_id);
-                    let base_label = definition
-                        .and_then(|d| d.label.clone())
-                        .unwrap_or_else(|| cfg.metric_id.clone());
-                    let precision = definition.map(|d| d.precision).unwrap_or(2) as usize;
-                    let unit = definition.and_then(|d| d.unit.as_deref()).unwrap_or("");
-
-                    let formatted = if precision == 0 {
-                        format!("{val:.0}")
-                    } else {
-                        format!("{val:.precision$}", precision = precision)
-                    };
-                    let show_value = cfg.show_value.unwrap_or(bars_config.show_value_default);
-                    let display_text = if show_value {
-                        let value_text = if unit.is_empty() {
-                            formatted
-                        } else {
-                            format!("{formatted}{unit}")
-                        };
-                        format!("{} {}", base_label, value_text)
-                    } else {
-                        base_label.clone()
-                    };
-
-                    if let Ok(mut tx) = label_text_q.get_mut(label_entity) {
-                        if **tx != display_text {
-                            **tx = display_text;
-                        }
-                    }
-                    if let Ok(mut col) = label_color_q.get_mut(label_entity) {
-                        *col = TextColor(Color::WHITE);
-                    }
+            if let Ok(mut tx) = label_text_q.get_mut(label_entity) {
+                if **tx != display_text {
+                    **tx = display_text;
                 }
             }
+            if let Ok(mut col) = label_color_q.get_mut(label_entity) {
+                *col = TextColor(Color::WHITE);
+            }
         }
+
+        bar_index += 1;
     }
 }
 

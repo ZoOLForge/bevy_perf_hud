@@ -108,7 +108,7 @@ fn main() {
 `PerfHudSettings` exposes additional knobs for tailoring the HUD:
 
 - `graph`: adjust canvas size, curve smoothing, quantization, and decide which metrics appear in the time-series chart.
-- `bars`: control whether resource bars render, set per-metric min/max bounds, and decide when to show numeric values.
+- `bars`: resource bars are now configured individually using `BarConfig` components on separate entities, with `MetricDefinition` components for text labels and formatting.
 - `enabled` / `origin`: toggle the HUD globally and anchor it anywhere on screen.
 
 Example: expand the graph, smooth the FPS curve, and shrink the system CPU bar range.
