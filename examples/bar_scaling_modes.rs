@@ -276,6 +276,7 @@ fn simulate_input(
 }
 
 /// A variable metric that changes gradually over time
+#[derive(Clone)]
 struct VariableMetric {
     id: String,
     time: f32,
@@ -323,6 +324,7 @@ impl PerfMetricProvider for VariableMetric {
 }
 
 /// A metric that has occasional spikes, good for demonstrating percentile scaling
+#[derive(Clone)]
 struct SpikyMetric {
     id: String,
     time: f32,

@@ -7,6 +7,7 @@ use bevy_perf_hud::{
 const CUSTOM_METRIC_ID: &str = "custom/network_latency_ms";
 
 /// Simulated network latency metric provider
+#[derive(Clone)]
 struct NetworkLatencyMetric {
     seed: u64,
     current_ms: f32,
