@@ -1,8 +1,8 @@
 use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    create_hud, BarsConfig, BevyPerfHudPlugin, HudHandles, 
-    BarConfig, BarScaleMode, MetricDefinition
+    create_hud, BarsConfig, BevyPerfHudPlugin, HudHandles,
+    BarConfig, BarScaleMode, MetricDefinition, MetricRegistry
 };
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
@@ -307,6 +307,8 @@ fn toggle_hud_mode_on_f1(
 
 fn apply_custom_hud_settings(
     mut hud_query: Query<(&mut BarsConfig,), With<HudHandles>>, // Get the HUD components
+    mut commands: Commands,
+    mut metric_registry: ResMut<MetricRegistry>,
 ) {
     let Ok((mut bars_config,)) = hud_query.single_mut() else {
         return;
@@ -317,7 +319,7 @@ fn apply_custom_hud_settings(
     if let Some(entity_bar) = bars_config
         .bars
         .iter_mut()
-        .find(|bar| bar.metric.id == "entity_count")
+        .find(|bar| bar.metric_id == "entity_count")
     {
         entity_bar.scale_mode = BarScaleMode::Auto {
             smoothing: 0.8,    // Smooth scaling changes
@@ -327,7 +329,7 @@ fn apply_custom_hud_settings(
         entity_bar.show_value = Some(true); // Show actual entity count
     }
 
-    // Add FPS bar with percentile scaling to handle frame spikes
+    // Register FPS metric definition
     let fps_metric = MetricDefinition {
         id: "fps".into(),
         label: Some("FPS (P5-P95)".into()),
@@ -335,10 +337,16 @@ fn apply_custom_hud_settings(
         precision: 0,
         color: Color::srgb(0.2, 0.8, 0.2),
     };
+    metric_registry.register(fps_metric.clone());
+
+    // Spawn FPS metric definition as component
+    commands.spawn(fps_metric);
+
+    // Add FPS bar with percentile scaling to handle frame spikes
     bars_config.bars.insert(
         0,
         BarConfig {
-            metric: fps_metric,
+            metric_id: "fps".into(),
             show_value: Some(true),
             min_value: 0.0,   // Fallback minimum
             max_value: 144.0, // Fallback maximum

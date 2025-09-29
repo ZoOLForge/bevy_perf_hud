@@ -18,7 +18,7 @@ use bevy::{
 };
 
 use crate::{
-    components::{BarsConfig, GraphConfig},
+    components::{BarsConfig, GraphConfig, MetricRegistry},
     constants::*,
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
@@ -33,6 +33,7 @@ pub fn create_hud(
     mut commands: Commands,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
+    metric_registry: Res<MetricRegistry>,
 ) {
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
@@ -67,8 +68,11 @@ pub fn create_hud(
     let bars_config = BarsConfig::default();
 
     // Graph material and node (optional)
+    #[allow(unused_assignments)]
     let mut graph_row_opt: Option<Entity> = None;
+    #[allow(unused_assignments)]
     let mut graph_entity_opt: Option<Entity> = None;
+    #[allow(unused_assignments)]
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
     let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
     {
@@ -93,7 +97,11 @@ pub fn create_hud(
             graph_params.curve_count = graph_config.curves.len().min(MAX_CURVES) as u32;
             // Write curve colors
             for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
-                let v = c.metric.color.to_linear().to_vec4();
+                let v = if let Some(metric_def) = metric_registry.get(&c.metric_id) {
+                    metric_def.color.to_linear().to_vec4()
+                } else {
+                    bevy::color::Color::WHITE.to_linear().to_vec4()
+                };
                 graph_params.colors[i] = v;
             }
         }
@@ -141,7 +149,7 @@ pub fn create_hud(
                 .id();
             commands.entity(eid).insert(ChildOf(label_container));
             graph_labels.push(crate::GraphLabelHandle {
-                metric_id: curve.metric.id.clone(),
+                metric_id: curve.metric_id.clone(),
                 entity: eid,
             });
         }
@@ -215,11 +223,11 @@ pub fn create_hud(
             commands.entity(row).insert(ChildOf(bars_root));
 
             for (col_idx, bar_cfg) in chunk.iter().enumerate() {
-                let base_label = bar_cfg
-                    .metric
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| bar_cfg.metric.id.clone());
+                let base_label = if let Some(metric_def) = metric_registry.get(&bar_cfg.metric_id) {
+                    metric_def.label.clone().unwrap_or_else(|| bar_cfg.metric_id.clone())
+                } else {
+                    bar_cfg.metric_id.clone()
+                };
 
                 let column = commands
                     .spawn((Node {
@@ -239,13 +247,18 @@ pub fn create_hud(
                     .id();
                 commands.entity(column).insert(ChildOf(row));
 
+                let color = if let Some(metric_def) = metric_registry.get(&bar_cfg.metric_id) {
+                    metric_def.color.to_linear().to_vec4()
+                } else {
+                    bevy::color::Color::WHITE.to_linear().to_vec4()
+                };
                 let mat = bar_mats.add(BarMaterial {
                     params: BarParams {
                         value: 0.0,
-                        r: bar_cfg.metric.color.to_linear().to_vec4().x,
-                        g: bar_cfg.metric.color.to_linear().to_vec4().y,
-                        b: bar_cfg.metric.color.to_linear().to_vec4().z,
-                        a: bar_cfg.metric.color.to_linear().to_vec4().w,
+                        r: color.x,
+                        g: color.y,
+                        b: color.z,
+                        a: color.w,
                         bg_r: bars_config.bg_color.to_linear().to_vec4().x,
                         bg_g: bars_config.bg_color.to_linear().to_vec4().y,
                         bg_b: bars_config.bg_color.to_linear().to_vec4().z,
@@ -315,6 +328,7 @@ pub fn create_hud(
 pub fn create_graph_hud(
     mut commands: Commands,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
+    metric_registry: Res<MetricRegistry>,
 ) -> Entity {
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
@@ -346,8 +360,11 @@ pub fn create_graph_hud(
     let graph_config = GraphConfig::default();
 
     // Graph material and node
+    #[allow(unused_assignments)]
     let mut graph_row_opt: Option<Entity> = None;
+    #[allow(unused_assignments)]
     let mut graph_entity_opt: Option<Entity> = None;
+    #[allow(unused_assignments)]
     let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
     let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
 
@@ -373,7 +390,11 @@ pub fn create_graph_hud(
             graph_params.curve_count = graph_config.curves.len().min(MAX_CURVES) as u32;
             // Write curve colors
             for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
-                let v = c.metric.color.to_linear().to_vec4();
+                let v = if let Some(metric_def) = metric_registry.get(&c.metric_id) {
+                    metric_def.color.to_linear().to_vec4()
+                } else {
+                    Color::WHITE.to_linear().to_vec4()
+                };
                 graph_params.colors[i] = v;
             }
         }
@@ -421,7 +442,7 @@ pub fn create_graph_hud(
                 .id();
             commands.entity(eid).insert(ChildOf(label_container));
             graph_labels.push(crate::GraphLabelHandle {
-                metric_id: curve.metric.id.clone(),
+                metric_id: curve.metric_id.clone(),
                 entity: eid,
             });
         }
@@ -498,6 +519,7 @@ pub fn update_graph_and_bars(
     _label_node_q: Query<&mut Node>,
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
+    metric_registry: Res<MetricRegistry>,
 ) {
     let Ok((
         graph_config,
@@ -517,7 +539,7 @@ pub fn update_graph_and_bars(
     // Process raw metric values through smoothing and quantization pipeline
     let mut filtered_values = [0.0_f32; MAX_CURVES];
     for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
-        let raw = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
+        let raw = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
 
         // Step 1: Apply exponential smoothing to reduce noise
         // Formula: new_value = prev_value + (raw_value - prev_value) * smoothing_factor
@@ -656,16 +678,16 @@ pub fn update_graph_and_bars(
             let Some(curve) = graph_config
                 .curves
                 .iter()
-                .find(|c| c.metric.id == label_handle.metric_id)
+                .find(|c| c.metric_id == label_handle.metric_id)
             else {
                 continue;
             };
 
-            let definition = &curve.metric;
-            let precision = definition.precision as usize;
-            let unit = definition.unit.as_deref().unwrap_or("");
+            let definition = metric_registry.get(&curve.metric_id);
+            let precision = definition.map(|d| d.precision).unwrap_or(2) as usize;
+            let unit = definition.and_then(|d| d.unit.as_deref()).unwrap_or("");
 
-            let value = samples.get(curve.metric.id.as_str()).unwrap_or(0.0);
+            let value = samples.get(curve.metric_id.as_str()).unwrap_or(0.0);
             let formatted = if precision == 0 {
                 format!("{value:.0}")
             } else {
@@ -683,7 +705,9 @@ pub fn update_graph_and_bars(
                 }
             }
             if let Ok(mut col) = label_color_q.get_mut(label_handle.entity) {
-                *col = TextColor(curve.metric.color);
+                if let Some(def) = definition {
+                    *col = TextColor(def.color);
+                }
             }
         }
     }
@@ -710,7 +734,11 @@ pub fn update_graph_and_bars(
                 mat.params.curve_count = curve_count as u32;
                 // Sync curve colors every frame to allow hot updates
                 for (i, c) in graph_config.curves.iter().take(curve_count).enumerate() {
-                    mat.params.colors[i] = c.metric.color.to_linear().to_vec4();
+                    if let Some(metric_def) = metric_registry.get(&c.metric_id) {
+                        mat.params.colors[i] = metric_def.color.to_linear().to_vec4();
+                    } else {
+                        mat.params.colors[i] = bevy::color::Color::WHITE.to_linear().to_vec4();
+                    }
                 }
                 for i in curve_count..MAX_CURVES {
                     mat.params.colors[i] = Vec4::ZERO;
@@ -759,10 +787,10 @@ pub fn update_graph_and_bars(
             if i >= h.bar_materials.len() {
                 break;
             }
-            let val = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
+            let val = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
 
             // Get or create the scale state for this bar
-            let scale_state = bar_scale_states.get_or_create(&cfg.metric.id);
+            let scale_state = bar_scale_states.get_or_create(&cfg.metric_id);
 
             // Add current value to the scale state's history
             scale_state.add_sample(val);
@@ -785,7 +813,7 @@ pub fn update_graph_and_bars(
 
             if let Some(mat) = bar_mats.get_mut(&h.bar_materials[i]) {
                 mat.params.value = norm;
-                let v = cfg.metric.color.to_linear().to_vec4();
+                let v = metric_registry.get(&cfg.metric_id).map(|d| d.color).unwrap_or(bevy::color::Color::WHITE).to_linear().to_vec4();
                 mat.params.r = v.x;
                 mat.params.g = v.y;
                 mat.params.b = v.z;
@@ -799,13 +827,12 @@ pub fn update_graph_and_bars(
 
             // Update bar labels with current values and formatting
             if let Some(&label_entity) = h.bar_labels.get(i) {
-                let definition = &cfg.metric;
+                let definition = metric_registry.get(&cfg.metric_id);
                 let base_label = definition
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| definition.id.clone());
-                let precision = definition.precision as usize;
-                let unit = definition.unit.as_deref().unwrap_or("");
+                    .and_then(|d| d.label.clone())
+                    .unwrap_or_else(|| cfg.metric_id.clone());
+                let precision = definition.map(|d| d.precision).unwrap_or(2) as usize;
+                let unit = definition.and_then(|d| d.unit.as_deref()).unwrap_or("");
 
                 let formatted = if precision == 0 {
                     format!("{val:.0}")
@@ -851,6 +878,7 @@ pub fn update_graph(
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
+    metric_registry: Res<MetricRegistry>,
 ) {
     for (graph_config, h, samples, mut history, mut scale_state) in graph_query.iter_mut() {
         let curve_count = graph_config.curves.len().min(MAX_CURVES);
@@ -858,7 +886,7 @@ pub fn update_graph(
         // Process raw metric values through smoothing and quantization pipeline
         let mut filtered_values = [0.0_f32; MAX_CURVES];
         for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
-            let raw = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
+            let raw = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
 
             // Step 1: Apply exponential smoothing to reduce noise
             let smoothing = cfg
@@ -994,16 +1022,16 @@ pub fn update_graph(
                 let Some(curve) = graph_config
                     .curves
                     .iter()
-                    .find(|c| c.metric.id == label_handle.metric_id)
+                    .find(|c| c.metric_id == label_handle.metric_id)
                 else {
                     continue;
                 };
 
-                let definition = &curve.metric;
-                let precision = definition.precision as usize;
-                let unit = definition.unit.as_deref().unwrap_or("");
+                let definition = metric_registry.get(&curve.metric_id);
+                let precision = definition.map(|d| d.precision).unwrap_or(2) as usize;
+                let unit = definition.and_then(|d| d.unit.as_deref()).unwrap_or("");
 
-                let value = samples.get(curve.metric.id.as_str()).unwrap_or(0.0);
+                let value = samples.get(curve.metric_id.as_str()).unwrap_or(0.0);
                 let formatted = if precision == 0 {
                     format!("{value:.0}")
                 } else {
@@ -1021,7 +1049,9 @@ pub fn update_graph(
                     }
                 }
                 if let Ok(mut col) = label_color_q.get_mut(label_handle.entity) {
-                    *col = TextColor(curve.metric.color);
+                    if let Some(def) = definition {
+                        *col = TextColor(def.color);
+                    }
                 }
             }
         }
@@ -1048,7 +1078,11 @@ pub fn update_graph(
                     mat.params.curve_count = curve_count as u32;
                     // Sync curve colors every frame to allow hot updates
                     for (i, c) in graph_config.curves.iter().take(curve_count).enumerate() {
-                        mat.params.colors[i] = c.metric.color.to_linear().to_vec4();
+                        if let Some(metric_def) = metric_registry.get(&c.metric_id) {
+                            mat.params.colors[i] = metric_def.color.to_linear().to_vec4();
+                        } else {
+                            mat.params.colors[i] = bevy::color::Color::WHITE.to_linear().to_vec4();
+                        }
                     }
                     for i in curve_count..MAX_CURVES {
                         mat.params.colors[i] = Vec4::ZERO;
@@ -1105,6 +1139,7 @@ pub fn update_bars(
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
+    metric_registry: Res<MetricRegistry>,
 ) {
     for (bars_config, h, samples, mut bar_scale_states) in bars_query.iter_mut() {
         // Update bars (when enabled)
@@ -1113,10 +1148,10 @@ pub fn update_bars(
                 if i >= h.bar_materials.len() {
                     break;
                 }
-                let val = samples.get(cfg.metric.id.as_str()).unwrap_or(0.0);
+                let val = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
 
                 // Get or create the scale state for this bar
-                let scale_state = bar_scale_states.get_or_create(&cfg.metric.id);
+                let scale_state = bar_scale_states.get_or_create(&cfg.metric_id);
 
                 // Add current value to the scale state's history
                 scale_state.add_sample(val);
@@ -1139,7 +1174,7 @@ pub fn update_bars(
 
                 if let Some(mat) = bar_mats.get_mut(&h.bar_materials[i]) {
                     mat.params.value = norm;
-                    let v = cfg.metric.color.to_linear().to_vec4();
+                    let v = metric_registry.get(&cfg.metric_id).map(|d| d.color).unwrap_or(bevy::color::Color::WHITE).to_linear().to_vec4();
                     mat.params.r = v.x;
                     mat.params.g = v.y;
                     mat.params.b = v.z;
@@ -1153,13 +1188,12 @@ pub fn update_bars(
 
                 // Update bar labels with current values and formatting
                 if let Some(&label_entity) = h.bar_labels.get(i) {
-                    let definition = &cfg.metric;
+                    let definition = metric_registry.get(&cfg.metric_id);
                     let base_label = definition
-                        .label
-                        .clone()
-                        .unwrap_or_else(|| definition.id.clone());
-                    let precision = definition.precision as usize;
-                    let unit = definition.unit.as_deref().unwrap_or("");
+                        .and_then(|d| d.label.clone())
+                        .unwrap_or_else(|| cfg.metric_id.clone());
+                    let precision = definition.map(|d| d.precision).unwrap_or(2) as usize;
+                    let unit = definition.and_then(|d| d.unit.as_deref()).unwrap_or("");
 
                     let formatted = if precision == 0 {
                         format!("{val:.0}")

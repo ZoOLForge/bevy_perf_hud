@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BarConfig, BarScaleMode, BevyPerfHudPlugin, CurveConfig, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfMetricProvider, create_hud, GraphConfig, BarsConfig
+    PerfHudAppExt, PerfMetricProvider, create_hud, GraphConfig, BarsConfig, MetricRegistry
 };
 
 const CUSTOM_METRIC_ID: &str = "custom/network_latency_ms";
@@ -47,6 +47,8 @@ impl PerfMetricProvider for NetworkLatencyMetric {
 // Function to apply custom metric configuration to the HUD
 fn apply_custom_metric_config(
     mut hud_query: Query<(&mut GraphConfig, &mut BarsConfig)>,
+    mut commands: Commands,
+    mut metric_registry: ResMut<MetricRegistry>,
 ) {
     // Extend default HUD with network latency metric
     let latency_metric = MetricDefinition {
@@ -57,6 +59,12 @@ fn apply_custom_metric_config(
         color: Color::srgb(0.65, 0.11, 0.0),
     };
 
+    // Register the metric definition
+    metric_registry.register(latency_metric.clone());
+
+    // Spawn metric definition as component
+    commands.spawn(latency_metric.clone());
+
     let Ok((mut graph_config, mut bars_config)) = hud_query.single_mut() else {
         return;
     };
@@ -64,7 +72,7 @@ fn apply_custom_metric_config(
     // Update graph settings
     graph_config.max_y = 160.0;
     graph_config.curves.push(CurveConfig {
-        metric: latency_metric.clone(),
+        metric_id: latency_metric.id.clone(),
         autoscale: Some(false),
         smoothing: Some(0.25),
         quantize_step: Some(0.5),
@@ -75,7 +83,7 @@ fn apply_custom_metric_config(
     bars_config.bars.insert(
         0,
         BarConfig {
-            metric: latency_metric.clone(),
+            metric_id: latency_metric.id.clone(),
             show_value: Some(true),
             min_value: 0.0,   // Fallback minimum
             max_value: 200.0, // Fallback maximum
@@ -93,7 +101,7 @@ fn apply_custom_metric_config(
     if let Some(entity_bar) = bars_config
         .bars
         .iter_mut()
-        .find(|bar| bar.metric.id == "entity_count")
+        .find(|bar| bar.metric_id == "entity_count")
     {
         entity_bar.scale_mode = BarScaleMode::Auto {
             smoothing: 0.7,   // Moderately smooth transitions

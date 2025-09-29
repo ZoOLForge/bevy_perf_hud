@@ -3,7 +3,7 @@
 //! This module contains all component types used by the HUD systems to store
 //! state directly on entities instead of using global resources.
 
-use bevy::{asset::Handle, ecs::entity::Entity, prelude::Component, color::Color, math::Vec2};
+use bevy::{asset::Handle, ecs::entity::Entity, prelude::{Component, Resource}, color::Color, math::Vec2};
 use std::collections::{HashMap, VecDeque};
 
 use crate::{BarMaterial, MultiLineGraphMaterial, MAX_CURVES, MAX_SAMPLES, constants::*};
@@ -392,7 +392,7 @@ impl BarScaleState {
 ///
 /// This structure defines how a metric should be presented in the HUD,
 /// including its visual appearance and formatting options.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Component)]
 pub struct MetricDefinition {
     /// Unique identifier for this metric (must match provider metric_id)
     pub id: String,
@@ -411,8 +411,8 @@ pub struct MetricDefinition {
 /// Each curve represents one metric tracked over time, such as FPS or frame time.
 #[derive(Debug, Clone)]
 pub struct CurveConfig {
-    /// The metric this curve represents (ID, label, color, etc.)
-    pub metric: MetricDefinition,
+    /// ID of the metric this curve represents (must reference a MetricDefinition component)
+    pub metric_id: String,
     /// Whether this curve should use autoscaling (None = use graph default)
     pub autoscale: Option<bool>,
     /// Exponential smoothing factor 0.0-1.0 (None = use graph default)
@@ -489,8 +489,8 @@ impl Default for BarScaleMode {
 /// Each bar represents one metric displayed as a horizontal progress indicator.
 #[derive(Debug, Clone)]
 pub struct BarConfig {
-    /// The metric this bar represents (ID, label, color, etc.)
-    pub metric: MetricDefinition,
+    /// ID of the metric this bar represents (must reference a MetricDefinition component)
+    pub metric_id: String,
     /// Whether to show numeric value and unit (None = use bars default)
     pub show_value: Option<bool>,
     /// Minimum value for bar normalization (0% fill) - used in Fixed mode or as hard limit
@@ -508,13 +508,7 @@ pub struct BarConfig {
 impl Default for BarConfig {
     fn default() -> Self {
         Self {
-            metric: MetricDefinition {
-                id: "default".to_owned(),
-                label: Some("Default".to_owned()),
-                unit: Some("".to_owned()),
-                precision: 2,
-                color: Color::srgb(0.5, 0.5, 0.5),
-            },
+            metric_id: "default".to_owned(),
             show_value: None,
             min_value: 0.0,
             max_value: 100.0,
@@ -522,6 +516,86 @@ impl Default for BarConfig {
             min_limit: None,
             max_limit: None,
         }
+    }
+}
+
+impl BarConfig {
+    /// Get the metric ID for this bar
+    pub fn metric_id(&self) -> &str {
+        &self.metric_id
+    }
+}
+
+impl CurveConfig {
+    /// Get the metric ID for this curve
+    pub fn metric_id(&self) -> &str {
+        &self.metric_id
+    }
+}
+
+/// A resource that manages the mapping between metric IDs and their definitions
+#[derive(Resource, Default)]
+pub struct MetricRegistry {
+    metrics: HashMap<String, MetricDefinition>,
+}
+
+impl MetricRegistry {
+    /// Register a metric definition
+    pub fn register(&mut self, metric: MetricDefinition) {
+        self.metrics.insert(metric.id.clone(), metric);
+    }
+
+    /// Get a metric definition by ID
+    pub fn get(&self, id: &str) -> Option<&MetricDefinition> {
+        self.metrics.get(id)
+    }
+
+    /// Register default metrics used by the system
+    pub fn register_defaults(&mut self) {
+        // Frame time metric
+        self.register(MetricDefinition {
+            id: "frame_time_ms".into(),
+            label: Some("FT:".into()),
+            unit: Some("ms".into()),
+            precision: 1,
+            color: Color::srgb(0.4, 0.4, 0.4),
+        });
+
+        // FPS metric
+        self.register(MetricDefinition {
+            id: "fps".into(),
+            label: Some("FPS:".into()),
+            unit: Some("fps".into()),
+            precision: 0,
+            color: Color::srgb(1.0, 1.0, 1.0),
+        });
+
+        // System CPU usage
+        self.register(MetricDefinition {
+            id: SYSTEM_CPU_USAGE_ID.to_owned(),
+            label: Some("SysCPU".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.96, 0.76, 0.18),
+        });
+
+        // System memory usage
+        self.register(MetricDefinition {
+            id: SYSTEM_MEM_USAGE_ID.to_owned(),
+            label: Some("SysMem".into()),
+            unit: Some("%".into()),
+            precision: 1,
+            color: Color::srgb(0.28, 0.56, 0.89),
+        });
+
+        // Entity count
+        self.register(MetricDefinition {
+            id: "entity_count".into(),
+            label: Some("Ent:".into()),
+            unit: None,
+            precision: 0,
+            color: Color::srgb(0.1, 0.8, 0.4),
+        });
     }
 }
 
@@ -601,11 +675,13 @@ impl GraphSettings {
             params.border_right = if self.border.right { 1 } else { 0 };
             params.border_top = if self.border.top { 1 } else { 0 };
             params.curve_count = self.curves.len().min(crate::MAX_CURVES) as u32;
-            // Write curve colors
-            for (i, c) in self.curves.iter().take(crate::MAX_CURVES).enumerate() {
-                let v = c.metric.color.to_linear().to_vec4();
-                params.colors[i] = v;
-            }
+            // TODO: Need to redesign this method to accept MetricDefinition components
+            // Write curve colors - currently disabled due to refactoring
+            // for (i, c) in self.curves.iter().take(crate::MAX_CURVES).enumerate() {
+            //     // Need to query MetricDefinition component by c.metric_id
+            //     let v = metric_def.color.to_linear().to_vec4();
+            //     params.colors[i] = v;
+            // }
         }
 
         params
@@ -614,21 +690,6 @@ impl GraphSettings {
 
 impl Default for GraphSettings {
     fn default() -> Self {
-        let frame_metric = MetricDefinition {
-            id: "frame_time_ms".into(),
-            label: Some("FT:".into()),
-            unit: Some("ms".into()),
-            precision: 1,
-            color: Color::srgb(0.4, 0.4, 0.4),
-        };
-        let fps_metric = MetricDefinition {
-            id: "fps".into(),
-            label: Some("FPS:".into()),
-            unit: Some("fps".into()),
-            precision: 0,
-            color: Color::srgb(1.0, 1.0, 1.0),
-        };
-
         Self {
             size: Vec2::new(300.0, 80.0),
             label_width: 60.0,
@@ -637,13 +698,13 @@ impl Default for GraphSettings {
             thickness: 0.012,
             curves: vec![
                 CurveConfig {
-                    metric: frame_metric.clone(),
+                    metric_id: "frame_time_ms".into(),
                     autoscale: None,
                     smoothing: Some(0.25),
                     quantize_step: Some(0.1),
                 },
                 CurveConfig {
-                    metric: fps_metric.clone(),
+                    metric_id: "fps".into(),
                     autoscale: None,
                     smoothing: None,
                     quantize_step: None,
@@ -675,34 +736,12 @@ impl Default for GraphSettings {
 
 impl Default for BarsSettings {
     fn default() -> Self {
-        let sys_cpu_metric = MetricDefinition {
-            id: SYSTEM_CPU_USAGE_ID.to_owned(),
-            label: Some("SysCPU".into()),
-            unit: Some("%".into()),
-            precision: 1,
-            color: Color::srgb(0.96, 0.76, 0.18),
-        };
-        let sys_mem_metric = MetricDefinition {
-            id: SYSTEM_MEM_USAGE_ID.to_owned(),
-            label: Some("SysMem".into()),
-            unit: Some("%".into()),
-            precision: 1,
-            color: Color::srgb(0.28, 0.56, 0.89),
-        };
-        let entity_metric = MetricDefinition {
-            id: "entity_count".into(),
-            label: Some("Ent:".into()),
-            unit: None,
-            precision: 0,
-            color: Color::srgb(0.1, 0.8, 0.4),
-        };
-
         Self {
             bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
             show_value_default: true,
             bars: vec![
                 BarConfig {
-                    metric: sys_cpu_metric.clone(),
+                    metric_id: SYSTEM_CPU_USAGE_ID.to_owned(),
                     show_value: Some(false),
                     min_value: 0.0,
                     max_value: 100.0,                // CPU usage percentage
@@ -711,7 +750,7 @@ impl Default for BarsSettings {
                     max_limit: None,
                 },
                 BarConfig {
-                    metric: sys_mem_metric,
+                    metric_id: SYSTEM_MEM_USAGE_ID.to_owned(),
                     show_value: Some(false),
                     min_value: 0.0,
                     max_value: 100.0,                // Memory usage percentage
@@ -720,7 +759,7 @@ impl Default for BarsSettings {
                     max_limit: None,
                 },
                 BarConfig {
-                    metric: entity_metric,
+                    metric_id: "entity_count".into(),
                     show_value: None,
                     min_value: 0.0,
                     max_value: 10000.0, // Entity count range - fallback values
@@ -778,21 +817,6 @@ pub struct GraphConfig {
 
 impl Default for GraphConfig {
     fn default() -> Self {
-        let frame_metric = MetricDefinition {
-            id: "frame_time_ms".into(),
-            label: Some("FT:".into()),
-            unit: Some("ms".into()),
-            precision: 1,
-            color: Color::srgb(0.4, 0.4, 0.4),
-        };
-        let fps_metric = MetricDefinition {
-            id: "fps".into(),
-            label: Some("FPS:".into()),
-            unit: Some("fps".into()),
-            precision: 0,
-            color: Color::srgb(1.0, 1.0, 1.0),
-        };
-
         Self {
             size: Vec2::new(300.0, 80.0),
             label_width: 60.0,
@@ -801,13 +825,13 @@ impl Default for GraphConfig {
             thickness: 0.012,
             curves: vec![
                 CurveConfig {
-                    metric: frame_metric.clone(),
+                    metric_id: "frame_time_ms".into(),
                     autoscale: None,
                     smoothing: Some(0.25),
                     quantize_step: Some(0.1),
                 },
                 CurveConfig {
-                    metric: fps_metric.clone(),
+                    metric_id: "fps".into(),
                     autoscale: None,
                     smoothing: None,
                     quantize_step: None,
@@ -850,34 +874,12 @@ pub struct BarsConfig {
 
 impl Default for BarsConfig {
     fn default() -> Self {
-        let sys_cpu_metric = MetricDefinition {
-            id: SYSTEM_CPU_USAGE_ID.to_owned(),
-            label: Some("SysCPU".into()),
-            unit: Some("%".into()),
-            precision: 1,
-            color: Color::srgb(0.96, 0.76, 0.18),
-        };
-        let sys_mem_metric = MetricDefinition {
-            id: SYSTEM_MEM_USAGE_ID.to_owned(),
-            label: Some("SysMem".into()),
-            unit: Some("%".into()),
-            precision: 1,
-            color: Color::srgb(0.28, 0.56, 0.89),
-        };
-        let entity_metric = MetricDefinition {
-            id: "entity_count".into(),
-            label: Some("Ent:".into()),
-            unit: None,
-            precision: 0,
-            color: Color::srgb(0.1, 0.8, 0.4),
-        };
-
         Self {
             bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
             show_value_default: true,
             bars: vec![
                 BarConfig {
-                    metric: sys_cpu_metric.clone(),
+                    metric_id: SYSTEM_CPU_USAGE_ID.to_owned(),
                     show_value: Some(false),
                     min_value: 0.0,
                     max_value: 100.0,                // CPU usage percentage
@@ -886,7 +888,7 @@ impl Default for BarsConfig {
                     max_limit: None,
                 },
                 BarConfig {
-                    metric: sys_mem_metric,
+                    metric_id: SYSTEM_MEM_USAGE_ID.to_owned(),
                     show_value: Some(false),
                     min_value: 0.0,
                     max_value: 100.0,                // Memory usage percentage
@@ -895,7 +897,7 @@ impl Default for BarsConfig {
                     max_limit: None,
                 },
                 BarConfig {
-                    metric: entity_metric,
+                    metric_id: "entity_count".into(),
                     show_value: None,
                     min_value: 0.0,
                     max_value: 10000.0, // Entity count range - fallback values

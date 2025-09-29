@@ -14,7 +14,7 @@ use bevy::{
 
 use crate::{
     sample_diagnostics, update_bars, update_graph, update_graph_and_bars, BarMaterial,
-    MetricProviders, MultiLineGraphMaterial,
+    MetricProviders, MetricRegistry, MultiLineGraphMaterial,
 };
 
 /// Main plugin for the Bevy Performance HUD.
@@ -58,6 +58,8 @@ impl Plugin for BevyPerfHudPlugin {
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
             // Initialize metric providers resource (this is still needed as global config)
             .init_resource::<MetricProviders>() // Registry of metric sources
+            // Initialize metric registry for metric definitions
+            .init_resource::<MetricRegistry>()
             // Register systems for HUD lifecycle
             .add_systems(
                 Update,
@@ -74,5 +76,10 @@ impl Plugin for BevyPerfHudPlugin {
         app.world_mut()
             .resource_mut::<MetricProviders>()
             .ensure_default_entries();
+
+        // Register default metric definitions
+        app.world_mut()
+            .resource_mut::<MetricRegistry>()
+            .register_defaults();
     }
 }

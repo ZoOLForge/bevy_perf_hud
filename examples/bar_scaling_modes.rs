@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleMode, BarScaleStates, BarsConfig, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues};
+use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleMode, BarScaleStates, BarsConfig, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues, MetricRegistry};
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
 fn main() {
@@ -16,7 +16,7 @@ fn main() {
 }
 
 /// System wrapper to create bars-only HUD
-fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMaterial>>) {
+fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMaterial>>, mut metric_registry: ResMut<MetricRegistry>) {
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
     commands.entity(ui_cam).insert(Camera {
@@ -52,11 +52,21 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         color: Color::srgb(0.3, 0.3, 1.0),
     };
 
+    // Register metrics in the registry
+    metric_registry.register(fixed_mode_metric.clone());
+    metric_registry.register(auto_mode_metric.clone());
+    metric_registry.register(percentile_mode_metric.clone());
+
+    // Spawn metric definitions as components
+    commands.spawn(fixed_mode_metric.clone());
+    commands.spawn(auto_mode_metric.clone());
+    commands.spawn(percentile_mode_metric.clone());
+
     // Configure bars with different scaling modes
     bars_config.bars = vec![
         // Fixed mode bar - traditional static range
         BarConfig {
-            metric: fixed_mode_metric,
+            metric_id: "variable/cpu_load".into(),
             show_value: Some(true),
             min_value: 0.0,
             max_value: 100.0,
@@ -66,7 +76,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         },
         // Auto mode bar - adapts to data range with smoothing
         BarConfig {
-            metric: auto_mode_metric,
+            metric_id: "variable/memory_usage".into(),
             show_value: Some(true),
             min_value: 0.0,    // Used as fallback if no data
             max_value: 1000.0, // Used as fallback if no data
@@ -80,7 +90,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         },
         // Percentile mode bar - uses P5 to P95 range, good for spiky data
         BarConfig {
-            metric: percentile_mode_metric,
+            metric_id: "spiky/latency".into(),
             show_value: Some(true),
             min_value: 0.0,   // Used as fallback if insufficient data
             max_value: 200.0, // Used as fallback if insufficient data
@@ -164,11 +174,10 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
             commands.entity(row).insert(ChildOf(bars_root));
 
             for (col_idx, bar_cfg) in chunk.iter().enumerate() {
-                let base_label = bar_cfg
-                    .metric
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| bar_cfg.metric.id.clone());
+                let metric_def = metric_registry.get(&bar_cfg.metric_id);
+                let base_label = metric_def
+                    .and_then(|m| m.label.clone())
+                    .unwrap_or_else(|| bar_cfg.metric_id.clone());
 
                 let column = commands
                     .spawn((Node {
@@ -188,13 +197,14 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
                     .id();
                 commands.entity(column).insert(ChildOf(row));
 
+                let color = metric_def.map(|m| m.color).unwrap_or(Color::WHITE);
                 let mat = bar_mats.add(BarMaterial {
                     params: BarParams {
                         value: 0.0,
-                        r: bar_cfg.metric.color.to_linear().to_vec4().x,
-                        g: bar_cfg.metric.color.to_linear().to_vec4().y,
-                        b: bar_cfg.metric.color.to_linear().to_vec4().z,
-                        a: bar_cfg.metric.color.to_linear().to_vec4().w,
+                        r: color.to_linear().to_vec4().x,
+                        g: color.to_linear().to_vec4().y,
+                        b: color.to_linear().to_vec4().z,
+                        a: color.to_linear().to_vec4().w,
                         bg_r: bars_config.bg_color.to_linear().to_vec4().x,
                         bg_g: bars_config.bg_color.to_linear().to_vec4().y,
                         bg_b: bars_config.bg_color.to_linear().to_vec4().z,
