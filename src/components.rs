@@ -76,10 +76,66 @@ pub struct GraphHandles {
 pub struct BarsHandles {
     /// Entity for the bars container
     pub bars_root: Option<Entity>,
-    /// Material handles for bar shaders
-    pub bar_materials: Vec<Handle<BarMaterial>>,
     /// Entities for bar label text
     pub bar_labels: Vec<Entity>,
+}
+
+/// Component storing material handles for bar rendering.
+/// 
+/// This component contains the material handles used to render performance bars.
+/// It's separate from BarsHandles to allow more granular querying and updating.
+#[derive(Component, Default)]
+pub struct BarMaterials {
+    /// Material handles for bar shaders
+    pub materials: Vec<Handle<BarMaterial>>,
+}
+
+impl BarMaterials {
+    /// Create new BarMaterials with empty materials list
+    pub fn new() -> Self {
+        Self {
+            materials: Vec::new(),
+        }
+    }
+    
+    /// Push a new material handle to the list
+    pub fn push(&mut self, material: Handle<BarMaterial>) {
+        self.materials.push(material);
+    }
+    
+    /// Get a material handle by index
+    pub fn get(&self, index: usize) -> Option<&Handle<BarMaterial>> {
+        self.materials.get(index)
+    }
+    
+    /// Get a mutable reference to a material handle by index
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut Handle<BarMaterial>> {
+        self.materials.get_mut(index)
+    }
+    
+    /// Get the number of materials
+    pub fn len(&self) -> usize {
+        self.materials.len()
+    }
+    
+    /// Check if there are no materials
+    pub fn is_empty(&self) -> bool {
+        self.materials.is_empty()
+    }
+}
+
+impl std::ops::Index<usize> for BarMaterials {
+    type Output = Handle<BarMaterial>;
+    
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.materials[index]
+    }
+}
+
+impl std::ops::IndexMut<usize> for BarMaterials {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.materials[index]
+    }
 }
 
 /// Component storing the most recent sampled values for all performance metrics.

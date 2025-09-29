@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleStates, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues, MetricRegistry};
+use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleMode, BarScaleStates, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues, MetricRegistry, BarMaterials};
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
 fn main() {
@@ -224,8 +224,12 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     // Update the BarsHandles component on the root entity
     commands.entity(root).insert(BarsHandles {
         bars_root: None, // No separate bars_root since we merged them
-        bar_materials,
         bar_labels,
+    });
+    
+    // Create and insert the BarMaterials component with the bar materials
+    commands.entity(root).insert(BarMaterials {
+        materials: bar_materials,
     });
 }
 

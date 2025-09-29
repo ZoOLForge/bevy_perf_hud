@@ -18,11 +18,11 @@ use bevy::{
 };
 
 use crate::{
-    components::{BarConfig, GraphConfig, MetricRegistry, MetricDefinition},
+    components::{BarConfig, GraphConfig, MetricRegistry, MetricDefinition, BarsHandles, BarMaterials},
     constants::*,
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
-    BarsHandles, GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles,
+    GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles,
     SampledValues,
 };
 
@@ -1240,6 +1240,7 @@ pub fn create_bar_ui_elements(
 pub fn update_bars(
     bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
     mut bars_handles_query: Query<&mut BarsHandles>,
+    mut bar_materials_query: Query<&mut BarMaterials>,
     mut sampled_values_query: Query<&mut SampledValues>,
     mut bar_scale_states_query: Query<&mut crate::BarScaleStates>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
@@ -1257,11 +1258,14 @@ pub fn update_bars(
     let Ok(h) = bars_handles_query.single_mut() else {
         return;
     };
+    let Ok(materials) = bar_materials_query.single_mut() else {
+        return;
+    };
 
     // Update bars (when enabled)
     let mut bar_index = 0;
     for (bar_config, metric_definition) in bar_config_query.iter() {
-        if bar_index >= h.bar_materials.len() {
+        if bar_index >= materials.len() {
             break;
         }
         
@@ -1289,7 +1293,7 @@ pub fn update_bars(
             0.0
         };
 
-        if let Some(mat) = bar_mats.get_mut(&h.bar_materials[bar_index]) {
+        if let Some(mat) = bar_mats.get_mut(&materials[bar_index]) {
             mat.params.value = norm;
             let v = metric_definition.color.to_linear().to_vec4();
             mat.params.r = v.x;
