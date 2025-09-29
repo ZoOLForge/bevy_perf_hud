@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleMode, BarScaleStates, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues, MetricRegistry};
+use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleStates, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues, MetricRegistry};
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
 fn main() {
@@ -59,59 +59,32 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     commands.spawn(auto_mode_metric.clone());
     commands.spawn(percentile_mode_metric.clone());
 
-    // Define bar configurations with different scaling modes
-    let bar_configs = vec![
+    // Create BarConfig instances with different scaling modes using the new helper methods
+    let bar_configs_and_metrics = vec![
         // Fixed mode bar - traditional static range
         (
-            BarConfig {
-                metric_id: "variable/cpu_load".into(),
-                show_value: Some(true),
-                min_value: 0.0,
-                max_value: 100.0,
-                scale_mode: BarScaleMode::Fixed,
-                min_limit: None,
-                max_limit: None,
-                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
-            },
-            fixed_mode_metric.clone(), // Attach the metric definition to the same entity
+            BarConfig::fixed_mode("variable/cpu_load", 0.0, 100.0),
+            fixed_mode_metric.clone()
         ),
         // Auto mode bar - adapts to data range with smoothing
         (
-            BarConfig {
-                metric_id: "variable/memory_usage".into(),
-                show_value: Some(true),
-                min_value: 0.0,    // Used as fallback if no data
-                max_value: 1000.0, // Used as fallback if no data
-                scale_mode: BarScaleMode::Auto {
-                    smoothing: 0.8,   // Smooth transitions (0.0 = instant, 1.0 = never change)
-                    min_span: 100.0,  // Minimum range span
-                    margin_frac: 0.1, // 10% margin above and below data range
-                },
-                min_limit: Some(0.0),    // Hard minimum limit
-                max_limit: Some(2500.0), // Hard maximum limit
-                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
-            },
-            auto_mode_metric.clone(), // Attach the metric definition to the same entity
+            BarConfig::auto_mode("variable/memory_usage", 0.0, 1000.0),
+            auto_mode_metric.clone()
         ),
         // Percentile mode bar - uses P5 to P95 range, good for spiky data
         (
-            BarConfig {
-                metric_id: "spiky/latency".into(),
-                show_value: Some(true),
-                min_value: 0.0,   // Used as fallback if insufficient data
-                max_value: 200.0, // Used as fallback if insufficient data
-                scale_mode: BarScaleMode::Percentile {
-                    lower: 5.0,       // P5 percentile for minimum
-                    upper: 95.0,      // P95 percentile for maximum
-                    sample_count: 60, // Use last 60 samples (~1 second at 60fps)
-                },
-                min_limit: Some(0.0),    // Hard minimum limit
-                max_limit: Some(1000.0), // Hard maximum limit
-                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
-            },
-            percentile_mode_metric.clone(), // Attach the metric definition to the same entity
+            BarConfig::percentile_mode("spiky/latency", 0.0, 200.0),
+            percentile_mode_metric.clone()
         ),
     ];
+    
+    // Spawn individual BarConfig entities for each bar
+    for (bar_config, metric_def) in &bar_configs_and_metrics {
+        commands.spawn((
+            bar_config.clone(),
+            metric_def.clone(),
+        ));
+    }
 
     // Spawn root UI node without BarsConfig (it's been removed)
     let root = commands
@@ -130,12 +103,12 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         .id();
     commands.entity(root).insert(Visibility::Visible);
 
-    // Create bar UI elements for each bar configuration
+    // Create bars container
     let column_count = 2;
     let default_width = 300.0; // Use a default width for bars-only layout
     let column_width = (default_width - 12.0) / column_count as f32;
     let row_height = 24.0;
-    let total_height = (bar_configs.len() as f32 / column_count as f32).ceil() * row_height;
+    let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
 
     let bars_root = commands
         .spawn((Node {
@@ -157,7 +130,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
     let mut bar_labels: Vec<Entity> = Vec::new();
 
-    for (_chunk_index, chunk) in bar_configs.chunks(column_count).enumerate() {
+    for (_chunk_index, chunk) in bar_configs_and_metrics.chunks(column_count).enumerate() {
         let row = commands
             .spawn((Node {
                 width: Val::Px(default_width),

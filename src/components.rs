@@ -527,6 +527,97 @@ impl BarConfig {
     pub fn metric_id(&self) -> &str {
         &self.metric_id
     }
+    
+    /// Create a fixed mode bar configuration - traditional static range
+    /// 
+    /// This mode uses a fixed min/max range for normalization, which is 
+    /// ideal for metrics with known bounds like percentages (0-100%).
+    /// 
+    /// # Arguments
+    /// * `metric_id` - The ID of the metric this bar represents
+    /// * `min_value` - Minimum value (0% fill)
+    /// * `max_value` - Maximum value (100% fill)
+    /// 
+    /// # Example
+    /// ```
+    /// let bar_config = BarConfig::fixed_mode("cpu_usage", 0.0, 100.0);
+    /// ```
+    pub fn fixed_mode(metric_id: impl Into<String>, min_value: f32, max_value: f32) -> Self {
+        Self {
+            metric_id: metric_id.into(),
+            show_value: Some(true),
+            min_value,
+            max_value,
+            scale_mode: BarScaleMode::Fixed,
+            min_limit: None,
+            max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        }
+    }
+    
+    /// Create an auto mode bar configuration - adapts to data range with smoothing
+    /// 
+    /// This mode automatically adjusts the range based on historical data,
+    /// with smoothing to prevent rapid fluctuations. Good for metrics like
+    /// entity counts that vary significantly over time.
+    /// 
+    /// # Arguments
+    /// * `metric_id` - The ID of the metric this bar represents
+    /// * `fallback_min` - Fallback minimum value if no data
+    /// * `fallback_max` - Fallback maximum value if no data
+    /// 
+    /// # Example
+    /// ```
+    /// let bar_config = BarConfig::auto_mode("entity_count", 0.0, 10000.0);
+    /// ```
+    pub fn auto_mode(metric_id: impl Into<String>, fallback_min: f32, fallback_max: f32) -> Self {
+        Self {
+            metric_id: metric_id.into(),
+            show_value: Some(true),
+            min_value: fallback_min,
+            max_value: fallback_max,
+            scale_mode: BarScaleMode::Auto {
+                smoothing: 0.8,   // Moderate smoothing
+                min_span: 50.0,   // Minimum range span
+                margin_frac: 0.1, // 10% margin
+            },
+            min_limit: None,
+            max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        }
+    }
+    
+    /// Create a percentile mode bar configuration - uses P5 to P95 range
+    /// 
+    /// This mode uses percentiles of recent data to determine the range,
+    /// which is excellent for handling spiky metrics like latency where
+    /// you want to ignore outliers.
+    /// 
+    /// # Arguments
+    /// * `metric_id` - The ID of the metric this bar represents
+    /// * `fallback_min` - Fallback minimum value if insufficient data
+    /// * `fallback_max` - Fallback maximum value if insufficient data
+    /// 
+    /// # Example
+    /// ```
+    /// let bar_config = BarConfig::percentile_mode("network_latency", 0.0, 200.0);
+    /// ```
+    pub fn percentile_mode(metric_id: impl Into<String>, fallback_min: f32, fallback_max: f32) -> Self {
+        Self {
+            metric_id: metric_id.into(),
+            show_value: Some(true),
+            min_value: fallback_min,
+            max_value: fallback_max,
+            scale_mode: BarScaleMode::Percentile {
+                lower: 5.0,       // P5 percentile
+                upper: 95.0,      // P95 percentile
+                sample_count: 60, // Last 60 samples
+            },
+            min_limit: None,
+            max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        }
+    }
 }
 
 impl CurveConfig {
