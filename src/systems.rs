@@ -42,6 +42,62 @@ pub fn create_hud(
         ..default()
     });
 
+    // Create default BarConfig components to maintain backward compatibility
+    // These define the default bars that should be displayed
+    let default_bar_configs = vec![
+        // System CPU usage bar
+        BarConfig {
+            metric_id: crate::constants::SYSTEM_CPU_USAGE_ID.to_owned(),
+            show_value: Some(false),
+            min_value: 0.0,
+            max_value: 100.0,
+            scale_mode: crate::BarScaleMode::Fixed,
+            min_limit: None,
+            max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        },
+        // System memory usage bar
+        BarConfig {
+            metric_id: crate::constants::SYSTEM_MEM_USAGE_ID.to_owned(),
+            show_value: Some(false),
+            min_value: 0.0,
+            max_value: 100.0,
+            scale_mode: crate::BarScaleMode::Fixed,
+            min_limit: None,
+            max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        },
+        // Entity count bar
+        BarConfig {
+            metric_id: "entity_count".into(),
+            show_value: None,
+            min_value: 0.0,
+            max_value: 10000.0,
+            scale_mode: crate::BarScaleMode::Auto {
+                smoothing: 0.85,
+                min_span: 50.0,
+                margin_frac: 0.2,
+            },
+            min_limit: Some(0.0),
+            max_limit: Some(50000.0),
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        },
+    ];
+
+    // Spawn entities with default BarConfig components
+    for bar_config in default_bar_configs {
+        // Try to get the corresponding metric definition from the registry
+        if let Some(metric_def) = metric_registry.get(&bar_config.metric_id).cloned() {
+            commands.spawn((
+                bar_config,
+                metric_def,
+            ));
+        } else {
+            // If no metric definition exists, spawn just the BarConfig
+            commands.spawn(bar_config);
+        }
+    }
+
     // Spawn root UI node with default settings as components
     let root = commands
         .spawn((
@@ -176,15 +232,57 @@ pub fn create_hud(
     let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
     let mut bar_labels: Vec<Entity> = Vec::new();
     
-    // Bars container placed below the graph (empty for now, bars will be created dynamically)
-    // We'll set up a container for bars even if there are no default bars initially
+    // Create default bar configurations to maintain backward compatibility
+    let default_bars = [
+        // System CPU usage bar
+        BarConfig {
+            metric_id: crate::constants::SYSTEM_CPU_USAGE_ID.to_owned(),
+            show_value: Some(false),
+            min_value: 0.0,
+            max_value: 100.0,
+            scale_mode: crate::BarScaleMode::Fixed,
+            min_limit: None,
+            max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        },
+        // System memory usage bar
+        BarConfig {
+            metric_id: crate::constants::SYSTEM_MEM_USAGE_ID.to_owned(),
+            show_value: Some(false),
+            min_value: 0.0,
+            max_value: 100.0,
+            scale_mode: crate::BarScaleMode::Fixed,
+            min_limit: None,
+            max_limit: None,
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        },
+        // Entity count bar
+        BarConfig {
+            metric_id: "entity_count".into(),
+            show_value: None,
+            min_value: 0.0,
+            max_value: 10000.0,
+            scale_mode: crate::BarScaleMode::Auto {
+                smoothing: 0.85,
+                min_span: 50.0,
+                margin_frac: 0.2,
+            },
+            min_limit: Some(0.0),
+            max_limit: Some(50000.0),
+            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+        },
+    ];
+
+    // Bars container placed below the graph
     let column_count = 2;
     let column_width = (graph_config.size.x - 12.0) / column_count as f32;
+    let row_height = 24.0;
+    let total_height = (default_bars.len() as f32 / column_count as f32).ceil() * row_height;
 
-    let bars_root = commands
+    let bars_root_entity = commands
         .spawn((Node {
             width: Val::Px(graph_config.size.x),
-            height: Val::Px(1.0), // Start with minimal height, will be set dynamically
+            height: Val::Px(total_height),
             flex_direction: FlexDirection::Column,
             margin: UiRect {
                 left: Val::Px(graph_config.label_width.max(40.0)),
@@ -194,24 +292,109 @@ pub fn create_hud(
             ..default()
         },))
         .id();
-    commands.entity(bars_root).insert(ChildOf(root));
-    commands.entity(bars_root).insert(Visibility::Visible);
-    bars_root_opt = Some(bars_root);
+    commands.entity(bars_root_entity).insert(ChildOf(root));
+    commands.entity(bars_root_entity).insert(Visibility::Visible);
+    bars_root_opt = Some(bars_root_entity);
 
-    // Create a row for the bars (will be populated with bar components separately)
-    let row = commands
-        .spawn((Node {
-            width: Val::Px(graph_config.size.x),
-            height: Val::Px(24.0),
-            flex_direction: FlexDirection::Row,
-            margin: UiRect {
-                top: Val::Px(1.0),
+    // Create bar UI elements for default bars
+    for chunk in default_bars.chunks(column_count) {
+        let row = commands
+            .spawn((Node {
+                width: Val::Px(graph_config.size.x),
+                height: Val::Px(row_height),
+                flex_direction: FlexDirection::Row,
+                margin: UiRect {
+                    top: Val::Px(1.0),
+                    ..default()
+                },
                 ..default()
-            },
-            ..default()
-        },))
-        .id();
-    commands.entity(row).insert(ChildOf(bars_root));
+            },))
+            .id();
+        commands.entity(row).insert(ChildOf(bars_root_entity));
+
+        for (col_idx, bar_cfg) in chunk.iter().enumerate() {
+            // Get metric definition from registry (if it exists)
+            let metric_def = metric_registry.get(&bar_cfg.metric_id);
+            let base_label = metric_def
+                .and_then(|def| def.label.clone())
+                .unwrap_or_else(|| bar_cfg.metric_id.clone());
+            let color = metric_def
+                .map(|def| def.color)
+                .unwrap_or(Color::WHITE);
+
+            // Create column container
+            let column = commands
+                .spawn((Node {
+                    width: Val::Px(column_width),
+                    height: Val::Px(row_height),
+                    margin: UiRect {
+                        right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
+                            Val::Px(0.0)
+                        } else {
+                            Val::Px(8.0)
+                        },
+                        ..default()
+                    },
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },))
+                .id();
+            commands.entity(column).insert(ChildOf(row));
+
+            // Create bar material
+            let mat = bar_mats.add(BarMaterial {
+                params: BarParams {
+                    value: 0.0,
+                    r: color.to_linear().to_vec4().x,
+                    g: color.to_linear().to_vec4().y,
+                    b: color.to_linear().to_vec4().z,
+                    a: color.to_linear().to_vec4().w,
+                    bg_r: bar_cfg.bg_color.to_linear().to_vec4().x,
+                    bg_g: bar_cfg.bg_color.to_linear().to_vec4().y,
+                    bg_b: bar_cfg.bg_color.to_linear().to_vec4().z,
+                    bg_a: bar_cfg.bg_color.to_linear().to_vec4().w,
+                },
+            });
+
+            // Create bar entity
+            let bar_entity = commands
+                .spawn((
+                    MaterialNode(mat.clone()),
+                    Node {
+                        width: Val::Px(column_width),
+                        height: Val::Px(row_height - 4.0),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(bar_entity).insert(ChildOf(column));
+
+            // Create bar label
+            let bar_label = commands
+                .spawn((
+                    Text::new(base_label),
+                    TextColor(Color::WHITE),
+                    TextFont {
+                        font_size: 10.0,
+                        ..default()
+                    },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(6.0),
+                        top: Val::Px(5.0),
+                        width: Val::Px(column_width - 12.0),
+                        overflow: Overflow::hidden(),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(bar_label).insert(ChildOf(bar_entity));
+
+            bar_entities.push(bar_entity);
+            bar_materials.push(mat);
+            bar_labels.push(bar_label);
+        }
+    }
 
     // Update the Node position using the origin component - this part is tricky because Commands
     // don't allow direct access to components on the same frame they're created
@@ -1036,27 +1219,42 @@ pub fn update_graph(
     }
 }
 
+/// System that creates UI elements for bar configs when needed.
+/// This system dynamically creates bar materials and labels for each BarConfig component.
+#[allow(clippy::too_many_arguments)]
+pub fn create_bar_ui_elements(
+    _commands: Commands,
+    _bar_config_query: Query<(Entity, &BarConfig, &MetricDefinition), Changed<BarConfig>>,
+    _bars_handles_query: Query<&mut BarsHandles>,
+    _bar_mats: ResMut<Assets<BarMaterial>>,
+) {
+    // Placeholder for a future implementation
+    // This system would handle dynamic creation of bar UI elements
+    // For now, bar UI elements are created in create_hud function
+}
+
 /// System that updates only the bars display with current performance data.
 /// Uses entities with BarConfig and BarsHandles components.
+/// Assumes UI elements have already been created by create_hud function.
 #[allow(clippy::too_many_arguments)]
 pub fn update_bars(
-    mut bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
+    bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
     mut bars_handles_query: Query<&mut BarsHandles>,
     mut sampled_values_query: Query<&mut SampledValues>,
     mut bar_scale_states_query: Query<&mut crate::BarScaleStates>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
-    metric_registry: Res<MetricRegistry>,
+    _metric_registry: Res<MetricRegistry>,
 ) {
     // Get global resources/components that are shared across all bars
-    let Ok(mut samples) = sampled_values_query.get_single_mut() else {
+    let Ok(samples) = sampled_values_query.single_mut() else {
         return;
     };
-    let Ok(mut bar_scale_states) = bar_scale_states_query.get_single_mut() else {
+    let Ok(mut bar_scale_states) = bar_scale_states_query.single_mut() else {
         return;
     };
-    let Ok(mut h) = bars_handles_query.get_single_mut() else {
+    let Ok(h) = bars_handles_query.single_mut() else {
         return;
     };
 

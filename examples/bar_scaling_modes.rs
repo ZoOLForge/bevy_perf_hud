@@ -59,59 +59,59 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     commands.spawn(auto_mode_metric.clone());
     commands.spawn(percentile_mode_metric.clone());
 
-    // Spawn individual BarConfig entities for each bar with different scaling modes
-    // Fixed mode bar - traditional static range
-    commands.spawn((
-        BarConfig {
-            metric_id: "variable/cpu_load".into(),
-            show_value: Some(true),
-            min_value: 0.0,
-            max_value: 100.0,
-            scale_mode: BarScaleMode::Fixed,
-            min_limit: None,
-            max_limit: None,
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
-        },
-        fixed_mode_metric.clone(), // Attach the metric definition to the same entity
-    ));
-    
-    // Auto mode bar - adapts to data range with smoothing
-    commands.spawn((
-        BarConfig {
-            metric_id: "variable/memory_usage".into(),
-            show_value: Some(true),
-            min_value: 0.0,    // Used as fallback if no data
-            max_value: 1000.0, // Used as fallback if no data
-            scale_mode: BarScaleMode::Auto {
-                smoothing: 0.8,   // Smooth transitions (0.0 = instant, 1.0 = never change)
-                min_span: 100.0,  // Minimum range span
-                margin_frac: 0.1, // 10% margin above and below data range
+    // Define bar configurations with different scaling modes
+    let bar_configs = vec![
+        // Fixed mode bar - traditional static range
+        (
+            BarConfig {
+                metric_id: "variable/cpu_load".into(),
+                show_value: Some(true),
+                min_value: 0.0,
+                max_value: 100.0,
+                scale_mode: BarScaleMode::Fixed,
+                min_limit: None,
+                max_limit: None,
+                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
             },
-            min_limit: Some(0.0),    // Hard minimum limit
-            max_limit: Some(2500.0), // Hard maximum limit
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
-        },
-        auto_mode_metric.clone(), // Attach the metric definition to the same entity
-    ));
-    
-    // Percentile mode bar - uses P5 to P95 range, good for spiky data
-    commands.spawn((
-        BarConfig {
-            metric_id: "spiky/latency".into(),
-            show_value: Some(true),
-            min_value: 0.0,   // Used as fallback if insufficient data
-            max_value: 200.0, // Used as fallback if insufficient data
-            scale_mode: BarScaleMode::Percentile {
-                lower: 5.0,       // P5 percentile for minimum
-                upper: 95.0,      // P95 percentile for maximum
-                sample_count: 60, // Use last 60 samples (~1 second at 60fps)
+            fixed_mode_metric.clone(), // Attach the metric definition to the same entity
+        ),
+        // Auto mode bar - adapts to data range with smoothing
+        (
+            BarConfig {
+                metric_id: "variable/memory_usage".into(),
+                show_value: Some(true),
+                min_value: 0.0,    // Used as fallback if no data
+                max_value: 1000.0, // Used as fallback if no data
+                scale_mode: BarScaleMode::Auto {
+                    smoothing: 0.8,   // Smooth transitions (0.0 = instant, 1.0 = never change)
+                    min_span: 100.0,  // Minimum range span
+                    margin_frac: 0.1, // 10% margin above and below data range
+                },
+                min_limit: Some(0.0),    // Hard minimum limit
+                max_limit: Some(2500.0), // Hard maximum limit
+                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
             },
-            min_limit: Some(0.0),    // Hard minimum limit
-            max_limit: Some(1000.0), // Hard maximum limit
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
-        },
-        percentile_mode_metric.clone(), // Attach the metric definition to the same entity
-    ));
+            auto_mode_metric.clone(), // Attach the metric definition to the same entity
+        ),
+        // Percentile mode bar - uses P5 to P95 range, good for spiky data
+        (
+            BarConfig {
+                metric_id: "spiky/latency".into(),
+                show_value: Some(true),
+                min_value: 0.0,   // Used as fallback if insufficient data
+                max_value: 200.0, // Used as fallback if insufficient data
+                scale_mode: BarScaleMode::Percentile {
+                    lower: 5.0,       // P5 percentile for minimum
+                    upper: 95.0,      // P95 percentile for maximum
+                    sample_count: 60, // Use last 60 samples (~1 second at 60fps)
+                },
+                min_limit: Some(0.0),    // Hard minimum limit
+                max_limit: Some(1000.0), // Hard maximum limit
+                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
+            },
+            percentile_mode_metric.clone(), // Attach the metric definition to the same entity
+        ),
+    ];
 
     // Spawn root UI node without BarsConfig (it's been removed)
     let root = commands
@@ -130,16 +130,17 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         .id();
     commands.entity(root).insert(Visibility::Visible);
 
-    // Bars container - create a basic UI structure for bars
-    // The actual bars will be handled by the systems using individual BarConfig components
+    // Create bar UI elements for each bar configuration
     let column_count = 2;
     let default_width = 300.0; // Use a default width for bars-only layout
     let column_width = (default_width - 12.0) / column_count as f32;
+    let row_height = 24.0;
+    let total_height = (bar_configs.len() as f32 / column_count as f32).ceil() * row_height;
 
     let bars_root = commands
         .spawn((Node {
             width: Val::Px(default_width),
-            height: Val::Px(100.0), // Start with a reasonable height
+            height: Val::Px(total_height),
             flex_direction: FlexDirection::Column,
             margin: UiRect {
                 left: Val::Px(0.0), // No left margin for bars-only layout
@@ -152,25 +153,115 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     commands.entity(bars_root).insert(ChildOf(root));
     commands.entity(bars_root).insert(Visibility::Visible);
 
-    let row = commands
-        .spawn((Node {
-            width: Val::Px(default_width),
-            height: Val::Px(24.0),
-            flex_direction: FlexDirection::Row,
-            margin: UiRect {
-                top: Val::Px(1.0),
+    // Create bar materials and labels for each bar configuration
+    let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
+    let mut bar_labels: Vec<Entity> = Vec::new();
+
+    for (_chunk_index, chunk) in bar_configs.chunks(column_count).enumerate() {
+        let row = commands
+            .spawn((Node {
+                width: Val::Px(default_width),
+                height: Val::Px(row_height),
+                flex_direction: FlexDirection::Row,
+                margin: UiRect {
+                    top: Val::Px(1.0),
+                    ..default()
+                },
                 ..default()
-            },
-            ..default()
-        },))
-        .id();
-    commands.entity(row).insert(ChildOf(bars_root));
+            },))
+            .id();
+        commands.entity(row).insert(ChildOf(bars_root));
+
+        for (col_idx, (bar_config, metric_definition)) in chunk.iter().enumerate() {
+            // Create column container
+            let column = commands
+                .spawn((Node {
+                    width: Val::Px(column_width),
+                    height: Val::Px(row_height),
+                    margin: UiRect {
+                        right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
+                            Val::Px(0.0)
+                        } else {
+                            Val::Px(8.0)
+                        },
+                        ..default()
+                    },
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },))
+                .id();
+            commands.entity(column).insert(ChildOf(row));
+
+            // Create bar material
+            let color = metric_definition.color;
+            let mat = bar_mats.add(BarMaterial {
+                params: BarParams {
+                    value: 0.0,
+                    r: color.to_linear().to_vec4().x,
+                    g: color.to_linear().to_vec4().y,
+                    b: color.to_linear().to_vec4().z,
+                    a: color.to_linear().to_vec4().w,
+                    bg_r: bar_config.bg_color.to_linear().to_vec4().x,
+                    bg_g: bar_config.bg_color.to_linear().to_vec4().y,
+                    bg_b: bar_config.bg_color.to_linear().to_vec4().z,
+                    bg_a: bar_config.bg_color.to_linear().to_vec4().w,
+                },
+            });
+
+            // Create bar entity
+            let bar_entity = commands
+                .spawn((
+                    MaterialNode(mat.clone()),
+                    Node {
+                        width: Val::Px(column_width),
+                        height: Val::Px(row_height - 4.0),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(bar_entity).insert(ChildOf(column));
+
+            // Create bar label
+            let base_label = metric_definition
+                .label
+                .clone()
+                .unwrap_or_else(|| bar_config.metric_id.clone());
+            let bar_label = commands
+                .spawn((
+                    Text::new(base_label),
+                    TextColor(Color::WHITE),
+                    TextFont {
+                        font_size: 10.0,
+                        ..default()
+                    },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(6.0),
+                        top: Val::Px(5.0),
+                        width: Val::Px(column_width - 12.0),
+                        overflow: Overflow::hidden(),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(bar_label).insert(ChildOf(bar_entity));
+
+            bar_materials.push(mat);
+            bar_labels.push(bar_label);
+
+            // Spawn the bar configuration entity
+            commands.spawn((
+                bar_config.clone(),
+                metric_definition.clone(),
+            ));
+        }
+    }
 
     // Update the BarsHandles component on the root entity
     commands.entity(root).insert(BarsHandles {
         bars_root: Some(bars_root),
-        bar_materials: Vec::new(), // Will be populated by systems
-        bar_labels: Vec::new(),    // Will be populated by systems
+        bar_materials,
+        bar_labels,
     });
 }
 
@@ -182,7 +273,7 @@ fn simulate_input(
     mut bars_handles_query: Query<&mut Visibility, With<BarsHandles>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        if let Ok(mut visibility) = bars_handles_query.get_single_mut() {
+        if let Ok(mut visibility) = bars_handles_query.single_mut() {
             *visibility = if *visibility == Visibility::Visible {
                 Visibility::Hidden
             } else {
