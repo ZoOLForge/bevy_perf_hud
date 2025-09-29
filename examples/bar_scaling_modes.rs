@@ -86,14 +86,21 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         ));
     }
 
-    // Spawn root UI node without BarsConfig (it's been removed)
+    // Spawn root UI node that contains both the HUD structure and bars
     let root = commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(16.0),
                 left: Val::Px(20.0),
+                width: Val::Px(default_width),
+                height: Val::Px(total_height),
                 flex_direction: FlexDirection::Column,
+                margin: UiRect {
+                    left: Val::Px(0.0), // No left margin for bars-only layout
+                    top: Val::Px(4.0),
+                    ..default()
+                },
                 ..default()
             },
             BarsHandles::default(),
@@ -102,29 +109,6 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         ))
         .id();
     commands.entity(root).insert(Visibility::Visible);
-
-    // Create bars container
-    let column_count = 2;
-    let default_width = 300.0; // Use a default width for bars-only layout
-    let column_width = (default_width - 12.0) / column_count as f32;
-    let row_height = 24.0;
-    let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
-
-    let bars_root = commands
-        .spawn((Node {
-            width: Val::Px(default_width),
-            height: Val::Px(total_height),
-            flex_direction: FlexDirection::Column,
-            margin: UiRect {
-                left: Val::Px(0.0), // No left margin for bars-only layout
-                top: Val::Px(4.0),
-                ..default()
-            },
-            ..default()
-        },))
-        .id();
-    commands.entity(bars_root).insert(ChildOf(root));
-    commands.entity(bars_root).insert(Visibility::Visible);
 
     // Create bar materials and labels for each bar configuration
     let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
@@ -143,7 +127,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
                 ..default()
             },))
             .id();
-        commands.entity(row).insert(ChildOf(bars_root));
+        commands.entity(row).insert(ChildOf(root)); // Attach to root instead of bars_root
 
         for (col_idx, (bar_config, metric_definition)) in chunk.iter().enumerate() {
             // Create column container
@@ -232,7 +216,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
 
     // Update the BarsHandles component on the root entity
     commands.entity(root).insert(BarsHandles {
-        bars_root: Some(bars_root),
+        bars_root: None, // No separate bars_root since we merged them
         bar_materials,
         bar_labels,
     });
