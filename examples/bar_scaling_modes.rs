@@ -48,11 +48,21 @@ fn setup_bars_hud(mut commands: Commands) {
     // Create BarConfig instances with different scaling modes
     let bar_configs = vec![
         // Fixed mode bar - traditional static range
-        BarConfig::fixed_mode("variable/cpu_load", 0.0, 100.0),
+        // Using default fallback (0.0-100.0) is sufficient for most cases
+        BarConfig::fixed_mode("variable/cpu_load"),
+
         // Auto mode bar - adapts to data range with smoothing
-        BarConfig::auto_mode("variable/memory_usage", 0.0, 1000.0),
+        // Default fallback works well as initial range before data is collected
+        BarConfig::auto_mode("variable/memory_usage"),
+
         // Percentile mode bar - uses P5 to P95 range, good for spiky data
-        BarConfig::percentile_mode("spiky/latency", 0.0, 200.0),
+        // Default fallback provides a reasonable starting point
+        BarConfig::percentile_mode("spiky/latency"),
+
+        // If you need custom fallback values, use the _with_fallback variants:
+        // BarConfig::fixed_mode_with_fallback("custom_metric", 0.0, 1000.0),
+        // BarConfig::auto_mode_with_fallback("custom_metric", 0.0, 10000.0),
+        // BarConfig::percentile_mode_with_fallback("custom_metric", 0.0, 500.0),
     ];
 
     // Spawn individual BarConfig entities for each bar

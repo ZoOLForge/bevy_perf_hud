@@ -461,14 +461,14 @@ fn setup_hud(
 
     // Configure bars with different scaling modes
     let bar_configs = vec![
-        // CPU - fixed mode (0-100%)
-        BarConfig::fixed_mode(SYSTEM_CPU_USAGE_ID, 0.0, 100.0),
-        // Memory - fixed mode (0-100%)
-        BarConfig::fixed_mode(SYSTEM_MEM_USAGE_ID, 0.0, 100.0),
-        // FPS - percentile mode to handle spikes
-        BarConfig::percentile_mode("fps", 0.0, 144.0),
-        // Entity count - auto mode for dynamic range
-        BarConfig::auto_mode("entity_count", 0.0, 10000.0),
+        // CPU - fixed mode (0-100%) - default fallback is perfect here
+        BarConfig::fixed_mode(SYSTEM_CPU_USAGE_ID),
+        // Memory - fixed mode (0-100%) - default fallback is perfect here
+        BarConfig::fixed_mode(SYSTEM_MEM_USAGE_ID),
+        // FPS - percentile mode to handle spikes - custom fallback for higher range
+        BarConfig::percentile_mode_with_fallback("fps", 0.0, 144.0),
+        // Entity count - auto mode for dynamic range - custom fallback for expected range
+        BarConfig::auto_mode_with_fallback("entity_count", 0.0, 10000.0),
     ];
 
     // Spawn individual BarConfig entities for each bar

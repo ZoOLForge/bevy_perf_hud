@@ -615,21 +615,37 @@ impl BarConfig {
         &self.metric_id
     }
     
-    /// Create a fixed mode bar configuration - traditional static range
-    /// 
-    /// This mode uses a fixed min/max range for normalization, which is 
+    /// Create a fixed mode bar configuration with default range (0.0 - 100.0)
+    ///
+    /// This mode uses a fixed min/max range for normalization, which is
     /// ideal for metrics with known bounds like percentages (0-100%).
-    /// 
+    ///
+    /// # Arguments
+    /// * `metric_id` - The ID of the metric this bar represents
+    ///
+    /// # Example
+    /// ```
+    /// let bar_config = BarConfig::fixed_mode("cpu_usage");
+    /// ```
+    pub fn fixed_mode(metric_id: impl Into<String>) -> Self {
+        Self::fixed_mode_with_fallback(metric_id, 0.0, 100.0)
+    }
+
+    /// Create a fixed mode bar configuration with custom range
+    ///
+    /// This mode uses a fixed min/max range for normalization, which is
+    /// ideal for metrics with known bounds like percentages (0-100%).
+    ///
     /// # Arguments
     /// * `metric_id` - The ID of the metric this bar represents
     /// * `min_value` - Minimum value (0% fill)
     /// * `max_value` - Maximum value (100% fill)
-    /// 
+    ///
     /// # Example
     /// ```
-    /// let bar_config = BarConfig::fixed_mode("cpu_usage", 0.0, 100.0);
+    /// let bar_config = BarConfig::fixed_mode_with_fallback("cpu_usage", 0.0, 100.0);
     /// ```
-    pub fn fixed_mode(metric_id: impl Into<String>, min_value: f32, max_value: f32) -> Self {
+    pub fn fixed_mode_with_fallback(metric_id: impl Into<String>, min_value: f32, max_value: f32) -> Self {
         Self {
             metric_id: metric_id.into(),
             show_value: Some(true),
@@ -642,22 +658,39 @@ impl BarConfig {
         }
     }
     
-    /// Create an auto mode bar configuration - adapts to data range with smoothing
-    /// 
+    /// Create an auto mode bar configuration with default fallback (0.0 - 100.0)
+    ///
     /// This mode automatically adjusts the range based on historical data,
     /// with smoothing to prevent rapid fluctuations. Good for metrics like
     /// entity counts that vary significantly over time.
-    /// 
+    ///
+    /// # Arguments
+    /// * `metric_id` - The ID of the metric this bar represents
+    ///
+    /// # Example
+    /// ```
+    /// let bar_config = BarConfig::auto_mode("entity_count");
+    /// ```
+    pub fn auto_mode(metric_id: impl Into<String>) -> Self {
+        Self::auto_mode_with_fallback(metric_id, 0.0, 100.0)
+    }
+
+    /// Create an auto mode bar configuration with custom fallback range
+    ///
+    /// This mode automatically adjusts the range based on historical data,
+    /// with smoothing to prevent rapid fluctuations. Good for metrics like
+    /// entity counts that vary significantly over time.
+    ///
     /// # Arguments
     /// * `metric_id` - The ID of the metric this bar represents
     /// * `fallback_min` - Fallback minimum value if no data
     /// * `fallback_max` - Fallback maximum value if no data
-    /// 
+    ///
     /// # Example
     /// ```
-    /// let bar_config = BarConfig::auto_mode("entity_count", 0.0, 10000.0);
+    /// let bar_config = BarConfig::auto_mode_with_fallback("entity_count", 0.0, 10000.0);
     /// ```
-    pub fn auto_mode(metric_id: impl Into<String>, fallback_min: f32, fallback_max: f32) -> Self {
+    pub fn auto_mode_with_fallback(metric_id: impl Into<String>, fallback_min: f32, fallback_max: f32) -> Self {
         Self {
             metric_id: metric_id.into(),
             show_value: Some(true),
@@ -674,22 +707,39 @@ impl BarConfig {
         }
     }
     
-    /// Create a percentile mode bar configuration - uses P5 to P95 range
-    /// 
+    /// Create a percentile mode bar configuration with default fallback (0.0 - 100.0)
+    ///
     /// This mode uses percentiles of recent data to determine the range,
     /// which is excellent for handling spiky metrics like latency where
     /// you want to ignore outliers.
-    /// 
+    ///
+    /// # Arguments
+    /// * `metric_id` - The ID of the metric this bar represents
+    ///
+    /// # Example
+    /// ```
+    /// let bar_config = BarConfig::percentile_mode("network_latency");
+    /// ```
+    pub fn percentile_mode(metric_id: impl Into<String>) -> Self {
+        Self::percentile_mode_with_fallback(metric_id, 0.0, 100.0)
+    }
+
+    /// Create a percentile mode bar configuration with custom fallback range
+    ///
+    /// This mode uses percentiles of recent data to determine the range,
+    /// which is excellent for handling spiky metrics like latency where
+    /// you want to ignore outliers.
+    ///
     /// # Arguments
     /// * `metric_id` - The ID of the metric this bar represents
     /// * `fallback_min` - Fallback minimum value if insufficient data
     /// * `fallback_max` - Fallback maximum value if insufficient data
-    /// 
+    ///
     /// # Example
     /// ```
-    /// let bar_config = BarConfig::percentile_mode("network_latency", 0.0, 200.0);
+    /// let bar_config = BarConfig::percentile_mode_with_fallback("network_latency", 0.0, 200.0);
     /// ```
-    pub fn percentile_mode(metric_id: impl Into<String>, fallback_min: f32, fallback_max: f32) -> Self {
+    pub fn percentile_mode_with_fallback(metric_id: impl Into<String>, fallback_min: f32, fallback_max: f32) -> Self {
         Self {
             metric_id: metric_id.into(),
             show_value: Some(true),

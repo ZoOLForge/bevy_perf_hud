@@ -257,10 +257,10 @@ fn setup_hud(
 
     // Configure bars with different scaling modes
     let bar_configs = vec![
-        // Latency - percentile mode to handle spikes
-        BarConfig::percentile_mode(CUSTOM_METRIC_ID, 0.0, 200.0),
-        // Entity count - auto mode for dynamic range
-        BarConfig::auto_mode("entity_count", 0.0, 10000.0),
+        // Latency - percentile mode to handle spikes - custom fallback for expected range
+        BarConfig::percentile_mode_with_fallback(CUSTOM_METRIC_ID, 0.0, 200.0),
+        // Entity count - auto mode for dynamic range - custom fallback for expected range
+        BarConfig::auto_mode_with_fallback("entity_count", 0.0, 10000.0),
     ];
 
     // Spawn individual BarConfig entities for each bar
