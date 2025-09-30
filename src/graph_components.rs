@@ -119,7 +119,7 @@ pub struct GraphScaleState {
 /// Configuration for a single curve (line) in a performance graph.
 ///
 /// Each curve represents one metric tracked over time, such as FPS or frame time.
-#[derive(Debug, Clone)]
+#[derive(Component, Debug, Clone)]
 pub struct CurveConfig {
     /// ID of the metric this curve represents (must reference a MetricDefinition component)
     pub metric_id: String,
@@ -174,6 +174,7 @@ pub struct GraphBorder {
 ///
 /// Controls how performance metrics are visualized as time-series graphs,
 /// including appearance, scaling behavior, and which metrics to show.
+/// Curves are now defined as separate CurveConfig component entities.
 #[derive(Debug, Clone)]
 pub struct GraphSettings {
     /// Size of the graph area in pixels (width, height)
@@ -186,8 +187,6 @@ pub struct GraphSettings {
     pub max_y: f32,
     /// Line thickness for graph curves (0.0-1.0 in normalized coordinates)
     pub thickness: f32,
-    /// List of curves (metrics) to display on this graph
-    pub curves: Vec<CurveConfig>,
     /// Default settings for curves that don't specify their own values
     pub curve_defaults: CurveDefaults,
     /// Background color of the graph area (supports transparency)
@@ -229,14 +228,8 @@ impl GraphSettings {
             params.border_bottom = if self.border.bottom { 1 } else { 0 };
             params.border_right = if self.border.right { 1 } else { 0 };
             params.border_top = if self.border.top { 1 } else { 0 };
-            params.curve_count = self.curves.len().min(crate::MAX_CURVES) as u32;
-            // TODO: Need to redesign this method to accept MetricDefinition components
-            // Write curve colors - currently disabled due to refactoring
-            // for (i, c) in self.curves.iter().take(crate::MAX_CURVES).enumerate() {
-            //     // Need to query MetricDefinition component by c.metric_id
-            //     let v = metric_def.color.to_linear().to_vec4();
-            //     params.colors[i] = v;
-            // }
+            // Curve count will be set by the system that queries CurveConfig entities
+            params.curve_count = 0;
         }
 
         params
@@ -251,20 +244,6 @@ impl Default for GraphSettings {
             min_y: 0.0,
             max_y: 30.0,
             thickness: 0.012,
-            curves: vec![
-                CurveConfig {
-                    metric_id: "frame_time_ms".into(),
-                    autoscale: None,
-                    smoothing: Some(0.25),
-                    quantize_step: Some(0.1),
-                },
-                CurveConfig {
-                    metric_id: "fps".into(),
-                    autoscale: None,
-                    smoothing: None,
-                    quantize_step: None,
-                },
-            ],
             curve_defaults: CurveDefaults {
                 autoscale: true,
                 smoothing: 0.2,
@@ -290,6 +269,7 @@ impl Default for GraphSettings {
 }
 
 /// Component storing configuration for the performance graph display.
+/// Curves are now defined as separate CurveConfig component entities.
 #[derive(Component, Debug, Clone)]
 pub struct GraphConfig {
     /// Size of the graph area in pixels (width, height)
@@ -302,8 +282,6 @@ pub struct GraphConfig {
     pub max_y: f32,
     /// Line thickness for graph curves (0.0-1.0 in normalized coordinates)
     pub thickness: f32,
-    /// List of curves (metrics) to display on this graph
-    pub curves: Vec<CurveConfig>,
     /// Default settings for curves that don't specify their own values
     pub curve_defaults: CurveDefaults,
     /// Background color of the graph area (supports transparency)
@@ -332,20 +310,6 @@ impl Default for GraphConfig {
             min_y: 0.0,
             max_y: 30.0,
             thickness: 0.012,
-            curves: vec![
-                CurveConfig {
-                    metric_id: "frame_time_ms".into(),
-                    autoscale: None,
-                    smoothing: Some(0.25),
-                    quantize_step: Some(0.1),
-                },
-                CurveConfig {
-                    metric_id: "fps".into(),
-                    autoscale: None,
-                    smoothing: None,
-                    quantize_step: None,
-                },
-            ],
             curve_defaults: CurveDefaults {
                 autoscale: true,
                 smoothing: 0.2,

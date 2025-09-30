@@ -20,490 +20,13 @@ use bevy::{
 
 use crate::{
     bar_components::{BarConfig, BarMaterials, BarsContainer, BarsHandles},
-    components::{HudHandles, MetricRegistry, SampledValues},
+    components::{MetricRegistry, SampledValues},
     constants::*,
     graph_components::{GraphConfig, GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers},
     providers::{MetricProviders, MetricSampleContext, ProviderRegistry},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
 };
 
-/// Function that creates all HUD UI entities and materials.
-/// This function is designed to be called by user code to create the HUD layout.
-/// The settings are now provided as components on the entity where HUD will be spawned.
-pub fn create_hud(
-    mut commands: Commands,
-    mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
-    mut bar_mats: ResMut<Assets<BarMaterial>>,
-    metric_registry: Res<MetricRegistry>,
-    bar_config_query: Query<&BarConfig>,
-    provider_registry: Res<ProviderRegistry>,
-) {
-    // UI 2D camera: render after 3D to avoid conflicts
-    let ui_cam = commands.spawn(Camera2d).id();
-    commands.entity(ui_cam).insert(Camera {
-        order: 1,
-        ..default()
-    });
-
-    // Note: BarConfig entities should be created by user code before calling create_hud
-    // This allows full customization of which bars to display and their configuration
-
-    // Spawn root UI node with default settings as components
-    // BarsContainer automatically includes: BarsHandles, BarMaterials, SampledValues, BarScaleStates
-    let root = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(16.0),
-                left: Val::Px(960.0),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            GraphConfig::default(),
-            HudHandles::default(),
-            GraphHandles::default(),
-            BarsContainer::default(),
-            HistoryBuffers::default(),
-            GraphScaleState::default(),
-        ))
-        .id();
-    commands.entity(root).insert(Visibility::Visible);
-
-    // Get the graph configuration from the root entity
-    let graph_config = GraphConfig::default();
-
-    // Graph material and node (optional)
-    #[allow(unused_assignments)]
-    let mut graph_row_opt: Option<Entity> = None;
-    #[allow(unused_assignments)]
-    let mut graph_entity_opt: Option<Entity> = None;
-    #[allow(unused_assignments)]
-    let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
-    let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
-    {
-        let mut graph_params = MultiLineGraphParams::default();
-        #[allow(clippy::field_reassign_with_default)]
-        {
-            graph_params.length = 0;
-            graph_params.min_y = graph_config.min_y;
-            graph_params.max_y = graph_config.max_y;
-            graph_params.thickness = graph_config.thickness;
-            graph_params.bg_color = graph_config.bg_color.to_linear().to_vec4();
-            graph_params.border_color = graph_config.border.color.to_linear().to_vec4();
-            graph_params.border_thickness = graph_config.border.thickness; // pixels
-            graph_params.border_thickness_uv_x =
-                (graph_config.border.thickness / graph_config.size.x).max(0.0001);
-            graph_params.border_thickness_uv_y =
-                (graph_config.border.thickness / graph_config.size.y).max(0.0001);
-            graph_params.border_left = if graph_config.border.left { 1 } else { 0 };
-            graph_params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
-            graph_params.border_right = if graph_config.border.right { 1 } else { 0 };
-            graph_params.border_top = if graph_config.border.top { 1 } else { 0 };
-            graph_params.curve_count = graph_config.curves.len().min(MAX_CURVES) as u32;
-            // Write curve colors
-            for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
-                let v = if let Some(metric_def) = metric_registry.get(&c.metric_id) {
-                    metric_def.color.to_linear().to_vec4()
-                } else {
-                    bevy::color::Color::WHITE.to_linear().to_vec4()
-                };
-                graph_params.colors[i] = v;
-            }
-        }
-        // Row container: left labels + right graph
-        let label_width = graph_config.label_width.max(40.0);
-        let graph_row = commands
-            .spawn((Node {
-                width: Val::Px(graph_config.size.x + label_width),
-                height: Val::Px(graph_config.size.y),
-                flex_direction: FlexDirection::Row,
-                ..default()
-            },))
-            .id();
-        commands.entity(graph_row).insert(ChildOf(root));
-        commands.entity(graph_row).insert(Visibility::Visible);
-        graph_row_opt = Some(graph_row);
-
-        // Label container (vertical to avoid overlap)
-        let label_container = commands
-            .spawn((Node {
-                width: Val::Px(label_width),
-                height: Val::Px(graph_config.size.y),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },))
-            .id();
-        commands.entity(label_container).insert(ChildOf(graph_row));
-
-        // Create label rows matching configured curves
-        for curve in graph_config.curves.iter().take(MAX_CURVES) {
-            let eid = commands
-                .spawn((
-                    Text::new(""),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 10.0,
-                        ..default()
-                    },
-                    Node {
-                        width: Val::Px(label_width),
-                        height: Val::Px(16.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(eid).insert(ChildOf(label_container));
-            graph_labels.push(crate::GraphLabelHandle {
-                metric_id: curve.metric_id.clone(),
-                entity: eid,
-            });
-        }
-
-        // Graph node
-        let gh = graph_mats.add(MultiLineGraphMaterial {
-            params: graph_params,
-        });
-        let ge = commands
-            .spawn((
-                MaterialNode(gh.clone()),
-                Node {
-                    width: Val::Px(graph_config.size.x),
-                    height: Val::Px(graph_config.size.y),
-                    ..default()
-                },
-            ))
-            .id();
-        commands.entity(ge).insert(ChildOf(graph_row));
-        graph_entity_opt = Some(ge);
-        graph_handle_opt = Some(gh);
-    }
-
-    let mut bars_root_opt: Option<Entity> = None;
-    let mut bar_entities: Vec<Entity> = Vec::new();
-    let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
-    let mut bar_labels: Vec<Entity> = Vec::new();
-
-    // Collect bar configurations from query
-    let bar_configs: Vec<&BarConfig> = bar_config_query.iter().collect();
-
-    // Bars container placed below the graph
-    let column_count = 2;
-    let column_width = (graph_config.size.x - 12.0) / column_count as f32;
-    let row_height = 24.0;
-    let total_height = (bar_configs.len() as f32 / column_count as f32).ceil() * row_height;
-
-    let bars_root_entity = commands
-        .spawn((Node {
-            width: Val::Px(graph_config.size.x),
-            height: Val::Px(total_height),
-            flex_direction: FlexDirection::Column,
-            margin: UiRect {
-                left: Val::Px(graph_config.label_width.max(40.0)),
-                top: Val::Px(4.0),
-                ..default()
-            },
-            ..default()
-        },))
-        .id();
-    commands.entity(bars_root_entity).insert(ChildOf(root));
-    commands.entity(bars_root_entity).insert(Visibility::Visible);
-    bars_root_opt = Some(bars_root_entity);
-
-    // Create bar UI elements for configured bars
-    for chunk in bar_configs.chunks(column_count) {
-        let row = commands
-            .spawn((Node {
-                width: Val::Px(graph_config.size.x),
-                height: Val::Px(row_height),
-                flex_direction: FlexDirection::Row,
-                margin: UiRect {
-                    top: Val::Px(1.0),
-                    ..default()
-                },
-                ..default()
-            },))
-            .id();
-        commands.entity(row).insert(ChildOf(bars_root_entity));
-
-        for (col_idx, bar_cfg) in chunk.iter().enumerate() {
-            // Get display config from provider registry
-            let display_config = provider_registry.get_display_config(&bar_cfg.metric_id);
-
-            let base_label = display_config
-                .and_then(|c| c.label.clone())
-                .unwrap_or_else(|| bar_cfg.metric_id.clone());
-            let color = display_config
-                .map(|c| c.color)
-                .unwrap_or(Color::srgb(1.0, 1.0, 1.0));
-
-            // Create column container
-            let column = commands
-                .spawn((Node {
-                    width: Val::Px(column_width),
-                    height: Val::Px(row_height),
-                    margin: UiRect {
-                        right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
-                            Val::Px(0.0)
-                        } else {
-                            Val::Px(8.0)
-                        },
-                        ..default()
-                    },
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },))
-                .id();
-            commands.entity(column).insert(ChildOf(row));
-
-            // Create bar material
-            let mat = bar_mats.add(BarMaterial {
-                params: BarParams {
-                    value: 0.0,
-                    r: color.to_linear().to_vec4().x,
-                    g: color.to_linear().to_vec4().y,
-                    b: color.to_linear().to_vec4().z,
-                    a: color.to_linear().to_vec4().w,
-                    bg_r: bar_cfg.bg_color.to_linear().to_vec4().x,
-                    bg_g: bar_cfg.bg_color.to_linear().to_vec4().y,
-                    bg_b: bar_cfg.bg_color.to_linear().to_vec4().z,
-                    bg_a: bar_cfg.bg_color.to_linear().to_vec4().w,
-                },
-            });
-
-            // Create bar entity
-            let bar_entity = commands
-                .spawn((
-                    MaterialNode(mat.clone()),
-                    Node {
-                        width: Val::Px(column_width),
-                        height: Val::Px(row_height - 4.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(bar_entity).insert(ChildOf(column));
-
-            // Create bar label
-            let bar_label = commands
-                .spawn((
-                    Text::new(base_label),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 10.0,
-                        ..default()
-                    },
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(6.0),
-                        top: Val::Px(5.0),
-                        width: Val::Px(column_width - 12.0),
-                        overflow: Overflow::hidden(),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(bar_label).insert(ChildOf(bar_entity));
-
-            bar_entities.push(bar_entity);
-            bar_materials.push(mat);
-            bar_labels.push(bar_label);
-        }
-    }
-
-    // Update the Node position using the origin component - this part is tricky because Commands
-    // don't allow direct access to components on the same frame they're created
-    // We'll handle position updates in a separate system instead
-
-    // Update the HudHandles component on the root entity
-    commands.entity(root).insert(HudHandles {
-        root: Some(root),
-        graph_row: graph_row_opt,
-        graph_entity: graph_entity_opt,
-        graph_material: graph_handle_opt.clone(),
-        graph_labels: graph_labels.clone(),
-        graph_label_width: graph_config.label_width.max(40.0),
-        bars_root: bars_root_opt,
-        bar_materials: bar_materials.clone(),
-        bar_labels: bar_labels.clone(),
-    });
-
-    // Update the GraphHandles component for update_graph system
-    commands.entity(root).insert(GraphHandles {
-        root: Some(root),
-        graph_row: graph_row_opt,
-        graph_entity: graph_entity_opt,
-        graph_material: graph_handle_opt,
-        graph_labels,
-        graph_label_width: graph_config.label_width.max(40.0),
-    });
-
-    // Update the BarsHandles component for update_bars system
-    commands.entity(root).insert(BarsHandles {
-        bars_root: bars_root_opt,
-        bar_labels: bar_labels.clone(),
-    });
-
-    // Update the BarMaterials component for update_bars system
-    commands.entity(root).insert(BarMaterials {
-        materials: bar_materials,
-    });
-}
-
-/// Function that creates only the graph UI entities and materials.
-/// This function allows for creating the performance graph independently of bars.
-pub fn create_graph_hud(
-    mut commands: Commands,
-    mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
-    metric_registry: Res<MetricRegistry>,
-) -> Entity {
-    // UI 2D camera: render after 3D to avoid conflicts
-    let ui_cam = commands.spawn(Camera2d).id();
-    commands.entity(ui_cam).insert(Camera {
-        order: 1,
-        ..default()
-    });
-
-    // Spawn root UI node with default settings as components
-    let root = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(16.0),
-                left: Val::Px(960.0),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            GraphConfig::default(),
-            GraphHandles::default(),
-            SampledValues::default(),
-            HistoryBuffers::default(),
-            GraphScaleState::default(),
-        ))
-        .id();
-    commands.entity(root).insert(Visibility::Visible);
-
-    // Get the graph configuration from the default
-    let graph_config = GraphConfig::default();
-
-    // Graph material and node
-    #[allow(unused_assignments)]
-    let mut graph_row_opt: Option<Entity> = None;
-    #[allow(unused_assignments)]
-    let mut graph_entity_opt: Option<Entity> = None;
-    #[allow(unused_assignments)]
-    let mut graph_handle_opt: Option<Handle<MultiLineGraphMaterial>> = None;
-    let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
-
-    {
-        let mut graph_params = MultiLineGraphParams::default();
-        #[allow(clippy::field_reassign_with_default)]
-        {
-            graph_params.length = 0;
-            graph_params.min_y = graph_config.min_y;
-            graph_params.max_y = graph_config.max_y;
-            graph_params.thickness = graph_config.thickness;
-            graph_params.bg_color = graph_config.bg_color.to_linear().to_vec4();
-            graph_params.border_color = graph_config.border.color.to_linear().to_vec4();
-            graph_params.border_thickness = graph_config.border.thickness; // pixels
-            graph_params.border_thickness_uv_x =
-                (graph_config.border.thickness / graph_config.size.x).max(0.0001);
-            graph_params.border_thickness_uv_y =
-                (graph_config.border.thickness / graph_config.size.y).max(0.0001);
-            graph_params.border_left = if graph_config.border.left { 1 } else { 0 };
-            graph_params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
-            graph_params.border_right = if graph_config.border.right { 1 } else { 0 };
-            graph_params.border_top = if graph_config.border.top { 1 } else { 0 };
-            graph_params.curve_count = graph_config.curves.len().min(MAX_CURVES) as u32;
-            // Write curve colors
-            for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
-                let v = if let Some(metric_def) = metric_registry.get(&c.metric_id) {
-                    metric_def.color.to_linear().to_vec4()
-                } else {
-                    Color::WHITE.to_linear().to_vec4()
-                };
-                graph_params.colors[i] = v;
-            }
-        }
-        // Row container: left labels + right graph
-        let label_width = graph_config.label_width.max(40.0);
-        let graph_row = commands
-            .spawn((Node {
-                width: Val::Px(graph_config.size.x + label_width),
-                height: Val::Px(graph_config.size.y),
-                flex_direction: FlexDirection::Row,
-                ..default()
-            },))
-            .id();
-        commands.entity(graph_row).insert(ChildOf(root));
-        commands.entity(graph_row).insert(Visibility::Visible);
-        graph_row_opt = Some(graph_row);
-
-        // Label container (vertical to avoid overlap)
-        let label_container = commands
-            .spawn((Node {
-                width: Val::Px(label_width),
-                height: Val::Px(graph_config.size.y),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },))
-            .id();
-        commands.entity(label_container).insert(ChildOf(graph_row));
-
-        // Create label rows matching configured curves
-        for curve in graph_config.curves.iter().take(MAX_CURVES) {
-            let eid = commands
-                .spawn((
-                    Text::new(""),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 10.0,
-                        ..default()
-                    },
-                    Node {
-                        width: Val::Px(label_width),
-                        height: Val::Px(16.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(eid).insert(ChildOf(label_container));
-            graph_labels.push(crate::GraphLabelHandle {
-                metric_id: curve.metric_id.clone(),
-                entity: eid,
-            });
-        }
-
-        // Graph node
-        let gh = graph_mats.add(MultiLineGraphMaterial {
-            params: graph_params,
-        });
-        let ge = commands
-            .spawn((
-                MaterialNode(gh.clone()),
-                Node {
-                    width: Val::Px(graph_config.size.x),
-                    height: Val::Px(graph_config.size.y),
-                    ..default()
-                },
-            ))
-            .id();
-        commands.entity(ge).insert(ChildOf(graph_row));
-        graph_entity_opt = Some(ge);
-        graph_handle_opt = Some(gh);
-    }
-
-    // Update the GraphHandles component on the root entity
-    commands.entity(root).insert(GraphHandles {
-        root: Some(root),
-        graph_row: graph_row_opt,
-        graph_entity: graph_entity_opt,
-        graph_material: graph_handle_opt,
-        graph_labels,
-        graph_label_width: graph_config.label_width.max(40.0),
-    });
-
-    root
-}
 
 /// System that samples all registered metric providers and updates current values.
 /// This system now runs unconditionally to collect metric data.
@@ -530,6 +53,7 @@ pub fn sample_diagnostics(
 
 /// System that updates only the graph display with current performance data.
 /// Uses entities with GraphConfig and GraphHandles components.
+/// Queries CurveConfig entities to get curve configurations.
 #[allow(clippy::too_many_arguments)]
 pub fn update_graph(
     mut graph_query: Query<(
@@ -539,17 +63,21 @@ pub fn update_graph(
         &mut HistoryBuffers,
         &mut GraphScaleState,
     )>,
+    curve_config_query: Query<&crate::CurveConfig>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
     metric_registry: Res<MetricRegistry>,
 ) {
     for (graph_config, h, samples, mut history, mut scale_state) in graph_query.iter_mut() {
-        let curve_count = graph_config.curves.len().min(MAX_CURVES);
+        // Collect all curve configurations
+        let curve_configs: Vec<crate::CurveConfig> =
+            curve_config_query.iter().map(|cfg| cfg.clone()).collect();
+        let curve_count = curve_configs.len().min(MAX_CURVES);
 
         // Process raw metric values through smoothing and quantization pipeline
         let mut filtered_values = [0.0_f32; MAX_CURVES];
-        for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
+        for (i, cfg) in curve_configs.iter().take(curve_count).enumerate() {
             let raw = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
 
             // Step 1: Apply exponential smoothing to reduce noise
@@ -610,8 +138,7 @@ pub fn update_graph(
         let mut target_max = graph_config.max_y;
 
         // Check if any curves want autoscaling and we have historical data
-        if graph_config
-            .curves
+        if curve_configs
             .iter()
             .any(|c| c.autoscale.unwrap_or(graph_config.curve_defaults.autoscale))
             && history.length > 0
@@ -621,7 +148,7 @@ pub fn update_graph(
             let mut mn = f32::INFINITY;
             let mut mx = f32::NEG_INFINITY;
 
-            for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
+            for (i, cfg) in curve_configs.iter().take(curve_count).enumerate() {
                 // Only include curves that want autoscaling in the calculation
                 if cfg
                     .autoscale
@@ -683,8 +210,7 @@ pub fn update_graph(
         // Update graph labels dynamically based on configured curves
         if !h.graph_labels.is_empty() {
             for label_handle in &h.graph_labels {
-                let Some(curve) = graph_config
-                    .curves
+                let Some(curve) = curve_configs
                     .iter()
                     .find(|c| c.metric_id == label_handle.metric_id)
                 else {
@@ -741,7 +267,7 @@ pub fn update_graph(
                     mat.params.border_top = if graph_config.border.top { 1 } else { 0 };
                     mat.params.curve_count = curve_count as u32;
                     // Sync curve colors every frame to allow hot updates
-                    for (i, c) in graph_config.curves.iter().take(curve_count).enumerate() {
+                    for (i, c) in curve_configs.iter().take(curve_count).enumerate() {
                         if let Some(metric_def) = metric_registry.get(&c.metric_id) {
                             mat.params.colors[i] = metric_def.color.to_linear().to_vec4();
                         } else {
@@ -1080,3 +606,143 @@ pub fn initialize_bars_ui(
 }
 
 
+
+/// System that creates UI elements for graph when GraphContainer is added.
+/// Similar to initialize_bars_ui but for graphs.
+/// Queries all CurveConfig entities and creates UI for them.
+pub fn initialize_graph_ui(
+    mut commands: Commands,
+    mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
+    graph_container_query: Query<
+        (Entity, &crate::GraphContainer, Option<&GraphHandles>),
+        Added<crate::GraphContainer>,
+    >,
+    curve_config_query: Query<&crate::CurveConfig>,
+    metric_registry: Res<MetricRegistry>,
+) {
+    for (container_entity, graph_container, graph_handles_opt) in graph_container_query.iter() {
+        // Collect all curve configurations
+        let curve_configs: Vec<crate::CurveConfig> =
+            curve_config_query.iter().map(|cfg| cfg.clone()).collect();
+
+        if curve_configs.is_empty() {
+            continue;
+        }
+
+        // Get the graph configuration from the container entity if it exists
+        // Otherwise use default
+        let graph_config = crate::GraphConfig::default();
+
+        // Determine the parent entity for graph UI:
+        // If there's a root in GraphHandles, use it; otherwise use the container itself
+        let graph_parent = graph_handles_opt
+            .and_then(|h| h.root)
+            .unwrap_or(container_entity);
+
+        // Create graph material and UI
+        let mut graph_params = MultiLineGraphParams::default();
+        #[allow(clippy::field_reassign_with_default)]
+        {
+            graph_params.length = 0;
+            graph_params.min_y = graph_config.min_y;
+            graph_params.max_y = graph_config.max_y;
+            graph_params.thickness = graph_config.thickness;
+            graph_params.bg_color = graph_config.bg_color.to_linear().to_vec4();
+            graph_params.border_color = graph_config.border.color.to_linear().to_vec4();
+            graph_params.border_thickness = graph_config.border.thickness;
+            graph_params.border_thickness_uv_x =
+                (graph_config.border.thickness / graph_container.size.x).max(0.0001);
+            graph_params.border_thickness_uv_y =
+                (graph_config.border.thickness / graph_container.size.y).max(0.0001);
+            graph_params.border_left = if graph_config.border.left { 1 } else { 0 };
+            graph_params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
+            graph_params.border_right = if graph_config.border.right { 1 } else { 0 };
+            graph_params.border_top = if graph_config.border.top { 1 } else { 0 };
+            graph_params.curve_count = curve_configs.len().min(MAX_CURVES) as u32;
+            // Write curve colors
+            for (i, c) in curve_configs.iter().take(MAX_CURVES).enumerate() {
+                let v = if let Some(metric_def) = metric_registry.get(&c.metric_id) {
+                    metric_def.color.to_linear().to_vec4()
+                } else {
+                    Color::WHITE.to_linear().to_vec4()
+                };
+                graph_params.colors[i] = v;
+            }
+        }
+
+        // Row container: left labels + right graph
+        let label_width = graph_container.label_width.max(40.0);
+        let graph_row = commands
+            .spawn(Node {
+                width: Val::Px(graph_container.size.x + label_width),
+                height: Val::Px(graph_container.size.y),
+                flex_direction: FlexDirection::Row,
+                ..default()
+            })
+            .id();
+        commands.entity(graph_row).insert(ChildOf(graph_parent));
+        commands.entity(graph_row).insert(Visibility::Visible);
+
+        // Label container (vertical to avoid overlap)
+        let label_container = commands
+            .spawn(Node {
+                width: Val::Px(label_width),
+                height: Val::Px(graph_container.size.y),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            })
+            .id();
+        commands.entity(label_container).insert(ChildOf(graph_row));
+
+        // Create label rows matching configured curves
+        let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
+        for curve in curve_configs.iter().take(MAX_CURVES) {
+            let eid = commands
+                .spawn((
+                    Text::new(""),
+                    TextColor(Color::WHITE),
+                    TextFont {
+                        font_size: 11.0,
+                        ..default()
+                    },
+                    Node {
+                        width: Val::Px(label_width),
+                        height: Val::Px(16.0),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(eid).insert(ChildOf(label_container));
+            graph_labels.push(GraphLabelHandle {
+                metric_id: curve.metric_id.clone(),
+                entity: eid,
+            });
+        }
+
+        // Graph node
+        let graph_material = graph_mats.add(MultiLineGraphMaterial {
+            params: graph_params,
+        });
+        let graph_entity = commands
+            .spawn((
+                MaterialNode(graph_material.clone()),
+                Node {
+                    width: Val::Px(graph_container.size.x),
+                    height: Val::Px(graph_container.size.y),
+                    ..default()
+                },
+            ))
+            .id();
+        commands.entity(graph_entity).insert(ChildOf(graph_row));
+
+        // Update the GraphHandles component on the container entity
+        commands.entity(container_entity).insert(GraphHandles {
+            root: Some(graph_parent),
+            graph_row: Some(graph_row),
+            graph_entity: Some(graph_entity),
+            graph_material: Some(graph_material),
+            graph_labels,
+            graph_label_width: label_width,
+        });
+    }
+}

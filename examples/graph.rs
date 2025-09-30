@@ -16,9 +16,8 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BevyPerfHudPlugin, CurveConfig, CurveDefaults, GraphBorder, GraphConfig, GraphContainer,
-    GraphHandles, GraphLabelHandle, MetricDefinition, MetricRegistry, MetricSampleContext,
-    MultiLineGraphMaterial, MultiLineGraphParams, PerfHudAppExt, PerfMetricProvider,
-    ProviderRegistry, MAX_CURVES,
+    GraphHandles, MetricDefinition, MetricRegistry, MetricSampleContext,
+    PerfHudAppExt, PerfMetricProvider, ProviderRegistry,
 };
 fn main() {
     App::new()
@@ -48,7 +47,6 @@ fn main() {
 /// System to create a graph-only HUD
 fn setup_graph_hud(
     mut commands: Commands,
-    mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     provider_registry: Res<ProviderRegistry>,
     mut metric_registry: ResMut<MetricRegistry>,
 ) {
@@ -73,36 +71,38 @@ fn setup_graph_hud(
         }
     }
 
-    // Configure graph with different curve settings
+    // Spawn CurveConfig entities for each curve
+    // Wave with autoscale and moderate smoothing
+    commands.spawn(CurveConfig {
+        metric_id: "wave/smooth".into(),
+        autoscale: Some(true),
+        smoothing: Some(0.3),
+        quantize_step: Some(1.0),
+    });
+
+    // Noise with heavy smoothing to show smoothing effect
+    commands.spawn(CurveConfig {
+        metric_id: "noise/raw".into(),
+        autoscale: Some(true),
+        smoothing: Some(0.8), // Heavy smoothing for noisy data
+        quantize_step: None,
+    });
+
+    // Step with quantization to show discrete values
+    commands.spawn(CurveConfig {
+        metric_id: "step/quantized".into(),
+        autoscale: Some(false), // Fixed range
+        smoothing: Some(0.1), // Minimal smoothing
+        quantize_step: Some(10.0), // Snap to multiples of 10
+    });
+
+    // Configure graph appearance and behavior
     let graph_config = GraphConfig {
         size: Vec2::new(400.0, 120.0),
         label_width: 100.0,
         min_y: 0.0,
         max_y: 60.0,
         thickness: 0.015,
-        curves: vec![
-            // Wave with autoscale and moderate smoothing
-            CurveConfig {
-                metric_id: "wave/smooth".into(),
-                autoscale: Some(true),
-                smoothing: Some(0.3),
-                quantize_step: Some(1.0),
-            },
-            // Noise with heavy smoothing to show smoothing effect
-            CurveConfig {
-                metric_id: "noise/raw".into(),
-                autoscale: Some(true),
-                smoothing: Some(0.8), // Heavy smoothing for noisy data
-                quantize_step: None,
-            },
-            // Step with quantization to show discrete values
-            CurveConfig {
-                metric_id: "step/quantized".into(),
-                autoscale: Some(false), // Fixed range
-                smoothing: Some(0.1), // Minimal smoothing
-                quantize_step: Some(10.0), // Snap to multiples of 10
-            },
-        ],
         curve_defaults: CurveDefaults {
             autoscale: true,
             smoothing: 0.2,
@@ -132,124 +132,19 @@ fn setup_graph_hud(
         label_width: graph_config.label_width,
     };
 
-    // Create root entity with graph components
-    let hud_root = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(20.0),
-                left: Val::Px(20.0),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            graph_config.clone(),
-            graph_container,
-        ))
-        .id();
-
-    // Create graph UI
-    let mut graph_params = MultiLineGraphParams::default();
-    graph_params.length = 0;
-    graph_params.min_y = graph_config.min_y;
-    graph_params.max_y = graph_config.max_y;
-    graph_params.thickness = graph_config.thickness;
-    graph_params.bg_color = graph_config.bg_color.to_linear().to_vec4();
-    graph_params.border_color = graph_config.border.color.to_linear().to_vec4();
-    graph_params.border_thickness = graph_config.border.thickness;
-    graph_params.border_thickness_uv_x =
-        (graph_config.border.thickness / graph_config.size.x).max(0.0001);
-    graph_params.border_thickness_uv_y =
-        (graph_config.border.thickness / graph_config.size.y).max(0.0001);
-    graph_params.border_left = if graph_config.border.left { 1 } else { 0 };
-    graph_params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
-    graph_params.border_right = if graph_config.border.right { 1 } else { 0 };
-    graph_params.border_top = if graph_config.border.top { 1 } else { 0 };
-    graph_params.curve_count = graph_config.curves.len().min(MAX_CURVES) as u32;
-
-    // Write curve colors from provider registry
-    for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
-        let v = if let Some(display_config) = provider_registry.get_display_config(&c.metric_id) {
-            display_config.color.to_linear().to_vec4()
-        } else {
-            Color::WHITE.to_linear().to_vec4()
-        };
-        graph_params.colors[i] = v;
-    }
-
-    // Create graph row container
-    let label_width = graph_config.label_width.max(40.0);
-    let graph_row = commands
-        .spawn(Node {
-            width: Val::Px(graph_config.size.x + label_width),
-            height: Val::Px(graph_config.size.y),
-            flex_direction: FlexDirection::Row,
-            ..default()
-        })
-        .id();
-    commands.entity(graph_row).insert(ChildOf(hud_root));
-    commands.entity(graph_row).insert(Visibility::Visible);
-
-    // Create label container
-    let label_container = commands
-        .spawn(Node {
-            width: Val::Px(label_width),
-            height: Val::Px(graph_config.size.y),
+    // Spawn root UI node with GraphContainer
+    // The initialize_graph_ui system will automatically create all child UI entities
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(20.0),
+            left: Val::Px(20.0),
             flex_direction: FlexDirection::Column,
             ..default()
-        })
-        .id();
-    commands.entity(label_container).insert(ChildOf(graph_row));
-
-    // Create graph labels
-    let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
-    for curve in graph_config.curves.iter().take(MAX_CURVES) {
-        let eid = commands
-            .spawn((
-                Text::new(""),
-                TextColor(Color::WHITE),
-                TextFont {
-                    font_size: 11.0,
-                    ..default()
-                },
-                Node {
-                    width: Val::Px(label_width),
-                    height: Val::Px(16.0),
-                    ..default()
-                },
-            ))
-            .id();
-        commands.entity(eid).insert(ChildOf(label_container));
-        graph_labels.push(GraphLabelHandle {
-            metric_id: curve.metric_id.clone(),
-            entity: eid,
-        });
-    }
-
-    // Create graph material and entity
-    let graph_material = graph_mats.add(MultiLineGraphMaterial {
-        params: graph_params,
-    });
-    let graph_entity = commands
-        .spawn((
-            MaterialNode(graph_material.clone()),
-            Node {
-                width: Val::Px(graph_config.size.x),
-                height: Val::Px(graph_config.size.y),
-                ..default()
-            },
-        ))
-        .id();
-    commands.entity(graph_entity).insert(ChildOf(graph_row));
-
-    // Update GraphHandles
-    commands.entity(hud_root).insert(GraphHandles {
-        root: Some(hud_root),
-        graph_row: Some(graph_row),
-        graph_entity: Some(graph_entity),
-        graph_material: Some(graph_material),
-        graph_labels,
-        graph_label_width: label_width,
-    });
+        },
+        graph_config,
+        graph_container,
+    ));
 }
 
 /// Toggle graph visibility with Space key
