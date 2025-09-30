@@ -8,7 +8,7 @@
 
 
 mod components;
-mod constants;
+pub mod constants;
 mod plugin;
 mod providers;
 mod render;

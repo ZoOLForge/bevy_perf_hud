@@ -3,7 +3,8 @@
 //! This module contains the main systems that manage the HUD lifecycle:
 //! - setup_hud: Creates all UI entities and materials during startup
 //! - sample_diagnostics: Updates metric values each frame
-//! - update_graph_and_bars: Renders current data to the HUD display
+//! - update_graph: Renders graph display with current data
+//! - update_bars: Renders bar display with current data
 
 use bevy::{
     asset::{Assets, Handle},
@@ -34,6 +35,7 @@ pub fn create_hud(
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     metric_registry: Res<MetricRegistry>,
+    bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
 ) {
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
@@ -42,61 +44,8 @@ pub fn create_hud(
         ..default()
     });
 
-    // Create default BarConfig components to maintain backward compatibility
-    // These define the default bars that should be displayed
-    let default_bar_configs = vec![
-        // System CPU usage bar
-        BarConfig {
-            metric_id: crate::constants::SYSTEM_CPU_USAGE_ID.to_owned(),
-            show_value: Some(false),
-            min_value: 0.0,
-            max_value: 100.0,
-            scale_mode: crate::BarScaleMode::Fixed,
-            min_limit: None,
-            max_limit: None,
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-        },
-        // System memory usage bar
-        BarConfig {
-            metric_id: crate::constants::SYSTEM_MEM_USAGE_ID.to_owned(),
-            show_value: Some(false),
-            min_value: 0.0,
-            max_value: 100.0,
-            scale_mode: crate::BarScaleMode::Fixed,
-            min_limit: None,
-            max_limit: None,
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-        },
-        // Entity count bar
-        BarConfig {
-            metric_id: "entity_count".into(),
-            show_value: None,
-            min_value: 0.0,
-            max_value: 10000.0,
-            scale_mode: crate::BarScaleMode::Auto {
-                smoothing: 0.85,
-                min_span: 50.0,
-                margin_frac: 0.2,
-            },
-            min_limit: Some(0.0),
-            max_limit: Some(50000.0),
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-        },
-    ];
-
-    // Spawn entities with default BarConfig components
-    for bar_config in default_bar_configs {
-        // Try to get the corresponding metric definition from the registry
-        if let Some(metric_def) = metric_registry.get(&bar_config.metric_id).cloned() {
-            commands.spawn((
-                bar_config,
-                metric_def,
-            ));
-        } else {
-            // If no metric definition exists, spawn just the BarConfig
-            commands.spawn(bar_config);
-        }
-    }
+    // Note: BarConfig entities should be created by user code before calling create_hud
+    // This allows full customization of which bars to display and their configuration
 
     // Spawn root UI node with default settings as components
     let root = commands
@@ -110,6 +59,9 @@ pub fn create_hud(
             },
             GraphConfig::default(),
             HudHandles::default(),
+            GraphHandles::default(),
+            BarsHandles::default(),
+            BarMaterials::default(),
             SampledValues::default(),
             HistoryBuffers::default(),
             GraphScaleState::default(),
@@ -231,53 +183,15 @@ pub fn create_hud(
     let mut bar_entities: Vec<Entity> = Vec::new();
     let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
     let mut bar_labels: Vec<Entity> = Vec::new();
-    
-    // Create default bar configurations to maintain backward compatibility
-    let default_bars = [
-        // System CPU usage bar
-        BarConfig {
-            metric_id: crate::constants::SYSTEM_CPU_USAGE_ID.to_owned(),
-            show_value: Some(false),
-            min_value: 0.0,
-            max_value: 100.0,
-            scale_mode: crate::BarScaleMode::Fixed,
-            min_limit: None,
-            max_limit: None,
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-        },
-        // System memory usage bar
-        BarConfig {
-            metric_id: crate::constants::SYSTEM_MEM_USAGE_ID.to_owned(),
-            show_value: Some(false),
-            min_value: 0.0,
-            max_value: 100.0,
-            scale_mode: crate::BarScaleMode::Fixed,
-            min_limit: None,
-            max_limit: None,
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-        },
-        // Entity count bar
-        BarConfig {
-            metric_id: "entity_count".into(),
-            show_value: None,
-            min_value: 0.0,
-            max_value: 10000.0,
-            scale_mode: crate::BarScaleMode::Auto {
-                smoothing: 0.85,
-                min_span: 50.0,
-                margin_frac: 0.2,
-            },
-            min_limit: Some(0.0),
-            max_limit: Some(50000.0),
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
-        },
-    ];
+
+    // Collect bar configurations from query
+    let bar_configs: Vec<(&BarConfig, &MetricDefinition)> = bar_config_query.iter().collect();
 
     // Bars container placed below the graph
     let column_count = 2;
     let column_width = (graph_config.size.x - 12.0) / column_count as f32;
     let row_height = 24.0;
-    let total_height = (default_bars.len() as f32 / column_count as f32).ceil() * row_height;
+    let total_height = (bar_configs.len() as f32 / column_count as f32).ceil() * row_height;
 
     let bars_root_entity = commands
         .spawn((Node {
@@ -296,8 +210,8 @@ pub fn create_hud(
     commands.entity(bars_root_entity).insert(Visibility::Visible);
     bars_root_opt = Some(bars_root_entity);
 
-    // Create bar UI elements for default bars
-    for chunk in default_bars.chunks(column_count) {
+    // Create bar UI elements for configured bars
+    for chunk in bar_configs.chunks(column_count) {
         let row = commands
             .spawn((Node {
                 width: Val::Px(graph_config.size.x),
@@ -312,15 +226,12 @@ pub fn create_hud(
             .id();
         commands.entity(row).insert(ChildOf(bars_root_entity));
 
-        for (col_idx, bar_cfg) in chunk.iter().enumerate() {
-            // Get metric definition from registry (if it exists)
-            let metric_def = metric_registry.get(&bar_cfg.metric_id);
+        for (col_idx, (bar_cfg, metric_def)) in chunk.iter().enumerate() {
             let base_label = metric_def
-                .and_then(|def| def.label.clone())
+                .label
+                .clone()
                 .unwrap_or_else(|| bar_cfg.metric_id.clone());
-            let color = metric_def
-                .map(|def| def.color)
-                .unwrap_or(Color::WHITE);
+            let color = metric_def.color;
 
             // Create column container
             let column = commands
@@ -405,12 +316,33 @@ pub fn create_hud(
         root: Some(root),
         graph_row: graph_row_opt,
         graph_entity: graph_entity_opt,
+        graph_material: graph_handle_opt.clone(),
+        graph_labels: graph_labels.clone(),
+        graph_label_width: graph_config.label_width.max(40.0),
+        bars_root: bars_root_opt,
+        bar_materials: bar_materials.clone(),
+        bar_labels: bar_labels.clone(),
+    });
+
+    // Update the GraphHandles component for update_graph system
+    commands.entity(root).insert(GraphHandles {
+        root: Some(root),
+        graph_row: graph_row_opt,
+        graph_entity: graph_entity_opt,
         graph_material: graph_handle_opt,
         graph_labels,
         graph_label_width: graph_config.label_width.max(40.0),
+    });
+
+    // Update the BarsHandles component for update_bars system
+    commands.entity(root).insert(BarsHandles {
         bars_root: bars_root_opt,
-        bar_materials,
-        bar_labels,
+        bar_labels: bar_labels.clone(),
+    });
+
+    // Update the BarMaterials component for update_bars system
+    commands.entity(root).insert(BarMaterials {
+        materials: bar_materials,
     });
 }
 
@@ -592,370 +524,6 @@ pub fn sample_diagnostics(
     }
 }
 
-/// System that updates graph and bar displays with current performance data.
-/// Now uses settings stored as components on the HUD entity.
-#[allow(clippy::too_many_arguments)]
-pub fn update_graph_and_bars(
-    mut hud_query: Query<(
-        &GraphConfig,
-        &mut HudHandles,
-        &mut SampledValues,
-        &mut HistoryBuffers,
-        &mut GraphScaleState,
-        &mut crate::BarScaleStates,
-    )>,
-    mut bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
-    mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
-    mut bar_mats: ResMut<Assets<BarMaterial>>,
-    _label_node_q: Query<&mut Node>,
-    mut label_text_q: Query<&mut Text>,
-    mut label_color_q: Query<&mut TextColor>,
-    metric_registry: Res<MetricRegistry>,
-) {
-    let Ok((
-        graph_config,
-        h,
-        samples,
-        mut history,
-        mut scale_state,
-        mut bar_scale_states,
-    )) = hud_query.single_mut()
-    else {
-        return;
-    };
-
-    let curve_count = graph_config.curves.len().min(MAX_CURVES);
-
-    // Process raw metric values through smoothing and quantization pipeline
-    let mut filtered_values = [0.0_f32; MAX_CURVES];
-    for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
-        let raw = samples.get(cfg.metric_id.as_str()).unwrap_or(0.0);
-
-        // Step 1: Apply exponential smoothing to reduce noise
-        // Formula: new_value = prev_value + (raw_value - prev_value) * smoothing_factor
-        let smoothing = cfg
-            .smoothing
-            .unwrap_or(graph_config.curve_defaults.smoothing)
-            .clamp(0.0, 1.0);
-
-        // Get the most recent value from history as the previous value
-        let prev = if history.length == 0 {
-            raw // No history yet, use raw value
-        } else if (history.length as usize) < MAX_SAMPLES {
-            history.values[i][history.length as usize - 1] // Buffer not full
-        } else {
-            history.values[i][MAX_SAMPLES - 1] // Buffer is full, use last element
-        };
-
-        let smoothed = prev + (raw - prev) * smoothing;
-
-        // Step 2: Apply quantization to create cleaner stepped values
-        // Rounds to the nearest multiple of quantize_step
-        let step = cfg
-            .quantize_step
-            .unwrap_or(graph_config.curve_defaults.quantize_step);
-        filtered_values[i] = if step > 0.0 {
-            (smoothed / step).round() * step
-        } else {
-            smoothed // No quantization
-        };
-    }
-
-    // Update history buffers with new values using circular buffer approach
-    if (history.length as usize) < MAX_SAMPLES {
-        // Buffer not yet full: append new values at the end
-        let idx = history.length as usize;
-        for (i, value) in filtered_values.iter().enumerate().take(MAX_CURVES) {
-            history.values[i][idx] = *value;
-        }
-        // Pad unused curves with zeros
-        for i in curve_count..MAX_CURVES {
-            history.values[i][idx] = 0.0;
-        }
-        history.length += 1;
-    } else {
-        // Buffer is full: implement sliding window by shifting all values left
-        // This maintains the most recent MAX_SAMPLES values for graphing
-        for (i, value) in filtered_values.iter().enumerate().take(MAX_CURVES) {
-            history.values[i].copy_within(1..MAX_SAMPLES, 0); // Shift left
-            history.values[i][MAX_SAMPLES - 1] = *value; // Insert new value at end
-        }
-        // Handle unused curves with zeros
-        for i in curve_count..MAX_CURVES {
-            history.values[i].copy_within(1..MAX_SAMPLES, 0); // Shift left
-            history.values[i][MAX_SAMPLES - 1] = 0.0; // Insert zero at end
-        }
-    }
-
-    // Calculate target Y-axis range: either fixed from config or auto-scaled from data
-    let mut target_min = graph_config.min_y;
-    let mut target_max = graph_config.max_y;
-
-    // Check if any curves want autoscaling and we have historical data
-    if graph_config
-        .curves
-        .iter()
-        .any(|c| c.autoscale.unwrap_or(graph_config.curve_defaults.autoscale))
-        && history.length > 0
-    {
-        // Scan all historical data to find the actual min/max range
-        let len = history.length as usize;
-        let mut mn = f32::INFINITY;
-        let mut mx = f32::NEG_INFINITY;
-
-        for (i, cfg) in graph_config.curves.iter().take(curve_count).enumerate() {
-            // Only include curves that want autoscaling in the calculation
-            if cfg
-                .autoscale
-                .unwrap_or(graph_config.curve_defaults.autoscale)
-            {
-                for k in 0..len {
-                    mn = mn.min(history.values[i][k]);
-                    mx = mx.max(history.values[i][k]);
-                }
-            }
-        }
-
-        // Use the calculated range if it's valid
-        if mn.is_finite() && mx.is_finite() {
-            target_min = mn;
-            target_max = mx;
-        }
-    }
-
-    if graph_config.y_include_zero {
-        target_min = target_min.min(0.0);
-        target_max = target_max.max(0.0);
-    }
-
-    let span = (target_max - target_min)
-        .abs()
-        .max(graph_config.y_min_span.max(1e-3));
-    if target_max - target_min < span {
-        let mid = 0.5 * (target_max + target_min);
-        target_min = mid - 0.5 * span;
-        target_max = mid + 0.5 * span;
-    }
-
-    // Margins
-    let margin_frac = graph_config.y_margin_frac.clamp(0.0, 0.45);
-    let margin = span * margin_frac;
-    target_min -= margin;
-    target_max += margin;
-    // Step quantization
-    if graph_config.y_step_quantize > 0.0 {
-        let step = graph_config.y_step_quantize;
-        target_min = (target_min / step).floor() * step;
-        target_max = (target_max / step).ceil() * step;
-    }
-
-    // Smoothing
-    let a = graph_config.y_scale_smoothing.clamp(0.0, 1.0);
-    if scale_state.max_y <= scale_state.min_y {
-        scale_state.min_y = target_min;
-        scale_state.max_y = target_max;
-    } else {
-        scale_state.min_y = scale_state.min_y + (target_min - scale_state.min_y) * a;
-        scale_state.max_y = scale_state.max_y + (target_max - scale_state.max_y) * a;
-    }
-
-    let current_min = scale_state.min_y;
-    let current_max = (scale_state.max_y).max(current_min + 1e-3);
-
-    // Update graph labels dynamically based on configured curves
-    if !h.graph_labels.is_empty() {
-        for label_handle in &h.graph_labels {
-            let Some(curve) = graph_config
-                .curves
-                .iter()
-                .find(|c| c.metric_id == label_handle.metric_id)
-            else {
-                continue;
-            };
-
-            let definition = metric_registry.get(&curve.metric_id);
-            let precision = definition.map(|d| d.precision).unwrap_or(2) as usize;
-            let unit = definition.and_then(|d| d.unit.as_deref()).unwrap_or("");
-
-            let value = samples.get(curve.metric_id.as_str()).unwrap_or(0.0);
-            let formatted = if precision == 0 {
-                format!("{value:.0}")
-            } else {
-                format!("{value:.precision$}", precision = precision)
-            };
-            let text_value = if unit.is_empty() {
-                formatted
-            } else {
-                format!("{formatted} {unit}")
-            };
-
-            if let Ok(mut tx) = label_text_q.get_mut(label_handle.entity) {
-                if **tx != text_value {
-                    **tx = text_value.clone();
-                }
-            }
-            if let Ok(mut col) = label_color_q.get_mut(label_handle.entity) {
-                if let Some(def) = definition {
-                    *col = TextColor(def.color);
-                }
-            }
-        }
-    }
-
-    // Update graph material (when enabled)
-    {
-        if let Some(handle) = &h.graph_material {
-            if let Some(mat) = graph_mats.get_mut(handle) {
-                mat.params.length = history.length;
-                mat.params.min_y = current_min;
-                mat.params.max_y = current_max;
-                mat.params.thickness = graph_config.thickness;
-                mat.params.bg_color = graph_config.bg_color.to_linear().to_vec4();
-                mat.params.border_color = graph_config.border.color.to_linear().to_vec4();
-                mat.params.border_thickness = graph_config.border.thickness; // pixels
-                mat.params.border_thickness_uv_x =
-                    (graph_config.border.thickness / graph_config.size.x).max(0.0001);
-                mat.params.border_thickness_uv_y =
-                    (graph_config.border.thickness / graph_config.size.y).max(0.0001);
-                mat.params.border_left = if graph_config.border.left { 1 } else { 0 };
-                mat.params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
-                mat.params.border_right = if graph_config.border.right { 1 } else { 0 };
-                mat.params.border_top = if graph_config.border.top { 1 } else { 0 };
-                mat.params.curve_count = curve_count as u32;
-                // Sync curve colors every frame to allow hot updates
-                for (i, c) in graph_config.curves.iter().take(curve_count).enumerate() {
-                    if let Some(metric_def) = metric_registry.get(&c.metric_id) {
-                        mat.params.colors[i] = metric_def.color.to_linear().to_vec4();
-                    } else {
-                        mat.params.colors[i] = bevy::color::Color::WHITE.to_linear().to_vec4();
-                    }
-                }
-                for i in curve_count..MAX_CURVES {
-                    mat.params.colors[i] = Vec4::ZERO;
-                }
-                // Write values (pack into vec4)
-                let len = MAX_SAMPLES.min(history.length as usize);
-                let packed_len = len.div_ceil(4); // round up
-                for i in 0..MAX_CURVES {
-                    for j in 0..SAMPLES_VEC4 {
-                        let base = j * 4;
-                        let x0 = if base < len {
-                            history.values[i][base]
-                        } else {
-                            0.0
-                        };
-                        let x1 = if base + 1 < len {
-                            history.values[i][base + 1]
-                        } else {
-                            0.0
-                        };
-                        let x2 = if base + 2 < len {
-                            history.values[i][base + 2]
-                        } else {
-                            0.0
-                        };
-                        let x3 = if base + 3 < len {
-                            history.values[i][base + 3]
-                        } else {
-                            0.0
-                        };
-                        mat.params.values[i][j] = Vec4::new(x0, x1, x2, x3);
-                    }
-                    // Optional: zero unused segments packed_len..SAMPLES_VEC4
-                    for j in packed_len..SAMPLES_VEC4 {
-                        mat.params.values[i][j] = Vec4::ZERO;
-                    }
-                }
-                // Colors set at init; update here if config changed
-            }
-        }
-    }
-
-    // Update bars (when enabled)
-    {
-        let mut bar_index = 0;
-        for (bar_config, metric_definition) in bar_config_query.iter() {
-            if bar_index >= h.bar_materials.len() {
-                break;
-            }
-            let val = samples.get(&bar_config.metric_id).unwrap_or(0.0);
-
-            // Get or create the scale state for this bar
-            let scale_state = bar_scale_states.get_or_create(&bar_config.metric_id);
-
-            // Add current value to the scale state's history
-            scale_state.add_sample(val);
-
-            // Calculate the dynamic range based on the bar's scale mode
-            let (range_min, range_max) = scale_state.calculate_range(
-                &bar_config.scale_mode,
-                bar_config.min_value,
-                bar_config.max_value,
-                bar_config.min_limit,
-                bar_config.max_limit,
-            );
-
-            // Normalize the value using the calculated range
-            let norm = if range_max > range_min {
-                ((val - range_min) / (range_max - range_min)).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
-
-            if let Some(mat) = bar_mats.get_mut(&h.bar_materials[bar_index]) {
-                mat.params.value = norm;
-                let v = metric_definition.color.to_linear().to_vec4();
-                mat.params.r = v.x;
-                mat.params.g = v.y;
-                mat.params.b = v.z;
-                mat.params.a = v.w;
-                let bg = bar_config.bg_color.to_linear().to_vec4();
-                mat.params.bg_r = bg.x;
-                mat.params.bg_g = bg.y;
-                mat.params.bg_b = bg.z;
-                mat.params.bg_a = bg.w;
-            }
-
-            // Update bar labels with current values and formatting
-            if let Some(&label_entity) = h.bar_labels.get(bar_index) {
-                let base_label = metric_definition
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| bar_config.metric_id.clone());
-                let precision = metric_definition.precision as usize;
-                let unit = metric_definition.unit.as_deref().unwrap_or("");
-
-                let formatted = if precision == 0 {
-                    format!("{val:.0}")
-                } else {
-                    format!("{val:.precision$}", precision = precision)
-                };
-                let show_value = bar_config.show_value.unwrap_or(true);
-                let display_text = if show_value {
-                    let value_text = if unit.is_empty() {
-                        formatted
-                    } else {
-                        format!("{formatted}{unit}")
-                    };
-                    format!("{} {}", base_label, value_text)
-                } else {
-                    base_label.clone()
-                };
-
-                if let Ok(mut tx) = label_text_q.get_mut(label_entity) {
-                    if **tx != display_text {
-                        **tx = display_text;
-                    }
-                }
-                if let Ok(mut col) = label_color_q.get_mut(label_entity) {
-                    *col = TextColor(Color::WHITE);
-                }
-            }
-
-            bar_index += 1;
-        }
-    }
-}
 
 /// System that updates only the graph display with current performance data.
 /// Uses entities with GraphConfig and GraphHandles components.

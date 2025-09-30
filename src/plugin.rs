@@ -13,7 +13,7 @@ use bevy::{
 };
 
 use crate::{
-    sample_diagnostics, update_bars, update_graph, update_graph_and_bars, BarMaterial,
+    sample_diagnostics, update_bars, update_graph, BarMaterial,
     MetricProviders, MetricRegistry, MultiLineGraphMaterial,
 };
 
@@ -64,9 +64,7 @@ impl Plugin for BevyPerfHudPlugin {
             .add_systems(
                 Update,
                 (
-                    // Original combined system for backward compatibility
-                    (sample_diagnostics, update_graph_and_bars).chain(),
-                    // New separate systems for independent usage
+                    // Independent graph and bars systems
                     (sample_diagnostics, update_graph).chain(),
                     (sample_diagnostics, update_bars).chain(),
                 ),

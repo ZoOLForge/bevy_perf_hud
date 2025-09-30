@@ -309,6 +309,41 @@ fn apply_custom_hud_settings(
     mut commands: Commands,
     mut metric_registry: ResMut<MetricRegistry>,
 ) {
+    use bevy_perf_hud::constants::{SYSTEM_CPU_USAGE_ID, SYSTEM_MEM_USAGE_ID};
+
+    // Create default bars for CPU and Memory
+    if let Some(cpu_metric) = metric_registry.get(SYSTEM_CPU_USAGE_ID).cloned() {
+        commands.spawn((
+            BarConfig {
+                metric_id: SYSTEM_CPU_USAGE_ID.to_owned(),
+                show_value: Some(false),
+                min_value: 0.0,
+                max_value: 100.0,
+                scale_mode: BarScaleMode::Fixed,
+                min_limit: None,
+                max_limit: None,
+                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+            },
+            cpu_metric,
+        ));
+    }
+
+    if let Some(mem_metric) = metric_registry.get(SYSTEM_MEM_USAGE_ID).cloned() {
+        commands.spawn((
+            BarConfig {
+                metric_id: SYSTEM_MEM_USAGE_ID.to_owned(),
+                show_value: Some(false),
+                min_value: 0.0,
+                max_value: 100.0,
+                scale_mode: BarScaleMode::Fixed,
+                min_limit: None,
+                max_limit: None,
+                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6),
+            },
+            mem_metric,
+        ));
+    }
+
     // Register FPS metric definition
     let fps_metric = MetricDefinition {
         id: "fps".into(),
@@ -382,8 +417,8 @@ fn main() {
         }))
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_3d)
-        .add_systems(Startup, create_hud)
-        .add_systems(Startup, apply_custom_hud_settings.after(create_hud)) // Apply customizations after HUD is created
+        .add_systems(Startup, apply_custom_hud_settings) // Create BarConfig entities first
+        .add_systems(Startup, create_hud.after(apply_custom_hud_settings)) // Then create UI
         .add_systems(
             Update,
             (
