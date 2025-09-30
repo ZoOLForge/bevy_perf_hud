@@ -30,22 +30,22 @@ use crate::{
 
 /// System that samples all registered metric providers and updates current values.
 /// This system now runs unconditionally to collect metric data.
+/// Updates all SampledValues instances (one per GraphContainer/BarsContainer).
 pub fn sample_diagnostics(
     diagnostics: Option<Res<DiagnosticsStore>>,
     mut sampled_values_query: Query<&mut SampledValues>,
     mut providers: ResMut<MetricProviders>,
 ) {
-    let Ok(mut samples) = sampled_values_query.single_mut() else {
-        return;
-    };
-
     let ctx = MetricSampleContext {
         diagnostics: diagnostics.as_deref(),
     };
 
-    for provider in providers.iter_mut() {
-        if let Some(value) = provider.sample(ctx) {
-            samples.set(provider.metric_id(), value);
+    // Update all SampledValues instances (supports multiple graphs/bars)
+    for mut samples in sampled_values_query.iter_mut() {
+        for provider in providers.iter_mut() {
+            if let Some(value) = provider.sample(ctx) {
+                samples.set(provider.metric_id(), value);
+            }
         }
     }
 }

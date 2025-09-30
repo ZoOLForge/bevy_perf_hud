@@ -24,6 +24,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_graph_hud)
+        // First graph metrics
         .add_perf_metric_provider(
             WaveMetric::new("wave/smooth", 10.0, 50.0, 0.5)
                 .with_label("Wave (Smooth)")
@@ -38,6 +39,22 @@ fn main() {
             StepMetric::new("step/quantized", 0.0, 100.0)
                 .with_label("Step (Quantized)")
                 .with_color(Color::srgb(0.3, 0.7, 1.0)), // Bright cyan-blue
+        )
+        // Second graph metrics (different data patterns)
+        .add_perf_metric_provider(
+            WaveMetric::new("wave/fast", 20.0, 80.0, 1.2)
+                .with_label("Wave (Fast)")
+                .with_color(Color::srgb(1.0, 0.6, 0.2)), // Orange
+        )
+        .add_perf_metric_provider(
+            NoiseMetric::new("noise/smooth", 10.0, 70.0)
+                .with_label("Noise (Smooth)")
+                .with_color(Color::srgb(0.8, 0.2, 1.0)), // Purple
+        )
+        .add_perf_metric_provider(
+            StepMetric::new("step/slow", 20.0, 90.0)
+                .with_label("Step (Slow)")
+                .with_color(Color::srgb(0.2, 0.8, 0.8)), // Cyan
         )
         .add_systems(Update, toggle_visibility)
         .run();
@@ -58,7 +75,14 @@ fn setup_graph_hud(
 
     // Register metric definitions with MetricRegistry so update_graph can find the colors
     // This is necessary because update_graph system queries MetricRegistry for colors
-    for metric_id in ["wave/smooth", "noise/raw", "step/quantized"] {
+    for metric_id in [
+        "wave/smooth",
+        "noise/raw",
+        "step/quantized",
+        "wave/fast",
+        "noise/smooth",
+        "step/slow",
+    ] {
         if let Some(display_config) = provider_registry.get_display_config(metric_id) {
             metric_registry.register(MetricDefinition {
                 id: metric_id.to_string(),
@@ -87,8 +111,7 @@ fn setup_graph_hud(
         label_width: graph_config.label_width,
     };
 
-    // Spawn root UI node with GraphContainer and CurveConfig children
-    // The initialize_graph_ui system will automatically create all child UI entities
+    // Spawn first graph (top-left) with three curves
     commands
         .spawn((
             Node {
@@ -98,7 +121,7 @@ fn setup_graph_hud(
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            graph_config,
+            graph_config.clone(),
             graph_container,
         ))
         .with_children(|parent| {
@@ -124,6 +147,57 @@ fn setup_graph_hud(
                 autoscale: Some(false), // Fixed range
                 smoothing: Some(0.1), // Minimal smoothing
                 quantize_step: Some(10.0), // Snap to multiples of 10
+            });
+        });
+
+    // Spawn second graph (top-right) with different metrics
+    let graph_config2 = GraphConfig {
+        size: Vec2::new(400.0, 120.0),
+        label_width: 100.0,
+        min_y: 0.0,
+        max_y: 100.0, // Different range for second graph
+        thickness: 0.015,
+        ..Default::default()
+    };
+
+    let graph_container2 = GraphContainer {
+        size: graph_config2.size,
+        label_width: graph_config2.label_width,
+    };
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(20.0),
+                right: Val::Px(20.0),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            graph_config2,
+            graph_container2,
+        ))
+        .with_children(|parent| {
+            // Different curves for the second graph
+            parent.spawn(CurveConfig {
+                metric_id: "wave/fast".into(),
+                autoscale: Some(true),
+                smoothing: Some(0.2),
+                quantize_step: Some(1.0),
+            });
+
+            parent.spawn(CurveConfig {
+                metric_id: "noise/smooth".into(),
+                autoscale: Some(true),
+                smoothing: Some(0.6),
+                quantize_step: None,
+            });
+
+            parent.spawn(CurveConfig {
+                metric_id: "step/slow".into(),
+                autoscale: Some(false),
+                smoothing: Some(0.15),
+                quantize_step: Some(5.0),
             });
         });
 }
