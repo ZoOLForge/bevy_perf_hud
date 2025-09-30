@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    BarConfig, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfMetricProvider, MetricRegistry,
+    BarConfig, BevyPerfHudPlugin, MetricSampleContext,
+    PerfHudAppExt, PerfMetricProvider, ProviderRegistry,
     BarMaterial, BarParams, BarMaterials, BarsContainer, BarsHandles,
     GraphConfig, GraphHandles, GraphLabelHandle, HistoryBuffers, GraphScaleState,
     MultiLineGraphMaterial, MultiLineGraphParams, CurveConfig, HudHandles, MAX_CURVES
@@ -14,6 +14,10 @@ const CUSTOM_METRIC_ID: &str = "custom/network_latency_ms";
 struct NetworkLatencyMetric {
     seed: u64,
     current_ms: f32,
+    label: Option<String>,
+    unit: Option<String>,
+    precision: u32,
+    color: Color,
 }
 
 impl Default for NetworkLatencyMetric {
@@ -21,7 +25,42 @@ impl Default for NetworkLatencyMetric {
         Self {
             seed: 0x1234_5678_9ABC_DEF0,
             current_ms: 48.0,
+            label: Some("Latency".into()),
+            unit: Some("ms".into()),
+            precision: 1,
+            color: Color::srgb(0.65, 0.11, 0.0),
         }
+    }
+}
+
+impl NetworkLatencyMetric {
+    /// Create a new NetworkLatencyMetric with default display configuration
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the display label
+    pub fn with_label(mut self, label: &str) -> Self {
+        self.label = Some(label.to_string());
+        self
+    }
+
+    /// Set the unit string
+    pub fn with_unit(mut self, unit: &str) -> Self {
+        self.unit = Some(unit.to_string());
+        self
+    }
+
+    /// Set the precision (decimal places)
+    pub fn with_precision(mut self, precision: u32) -> Self {
+        self.precision = precision;
+        self
+    }
+
+    /// Set the display color
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
     }
 }
 
@@ -46,31 +85,36 @@ impl PerfMetricProvider for NetworkLatencyMetric {
         self.current_ms = self.current_ms + (target - self.current_ms) * 0.2;
         Some(self.current_ms.max(0.0))
     }
+
+    fn label(&self) -> Option<String> {
+        self.label.clone()
+    }
+
+    fn unit(&self) -> Option<String> {
+        self.unit.clone()
+    }
+
+    fn precision(&self) -> u32 {
+        self.precision
+    }
+
+    fn color(&self) -> Color {
+        self.color
+    }
 }
 
 fn setup_hud(
     mut commands: Commands,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
-    mut metric_registry: ResMut<MetricRegistry>,
+    provider_registry: Res<ProviderRegistry>,
 ) {
-    // Define custom network latency metric
-    let latency_metric = MetricDefinition {
-        id: CUSTOM_METRIC_ID.into(),
-        label: Some("Latency".into()),
-        unit: Some("ms".into()),
-        precision: 1,
-        color: Color::srgb(0.65, 0.11, 0.0),
-    };
-
-    // Register the metric definition
-    metric_registry.register(latency_metric.clone());
 
     // Create root HUD entity with custom graph configuration
     let mut graph_config = GraphConfig::default();
     graph_config.max_y = 160.0;
     graph_config.curves.push(CurveConfig {
-        metric_id: latency_metric.id.clone(),
+        metric_id: CUSTOM_METRIC_ID.into(),
         autoscale: Some(false),
         smoothing: Some(0.25),
         quantize_step: Some(0.5),
@@ -128,8 +172,8 @@ fn setup_hud(
 
     // Write curve colors
     for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
-        let v = if let Some(metric_def) = metric_registry.get(&c.metric_id) {
-            metric_def.color.to_linear().to_vec4()
+        let v = if let Some(display_config) = provider_registry.get_display_config(&c.metric_id) {
+            display_config.color.to_linear().to_vec4()
         } else {
             Color::WHITE.to_linear().to_vec4()
         };
@@ -211,34 +255,22 @@ fn setup_hud(
         graph_label_width: label_width,
     });
 
-    // Get entity count metric from registry
-    let entity_count_metric = metric_registry.get("entity_count").cloned().unwrap();
-
-    // Configure bars with different scaling modes using helper methods
-    let bar_configs_and_metrics = vec![
+    // Configure bars with different scaling modes
+    let bar_configs = vec![
         // Latency - percentile mode to handle spikes
-        (
-            BarConfig::percentile_mode(CUSTOM_METRIC_ID, 0.0, 200.0),
-            latency_metric.clone()
-        ),
+        BarConfig::percentile_mode(CUSTOM_METRIC_ID, 0.0, 200.0),
         // Entity count - auto mode for dynamic range
-        (
-            BarConfig::auto_mode("entity_count", 0.0, 10000.0),
-            entity_count_metric.clone()
-        ),
+        BarConfig::auto_mode("entity_count", 0.0, 10000.0),
     ];
 
     // Spawn individual BarConfig entities for each bar
-    for (bar_config, metric_def) in &bar_configs_and_metrics {
-        commands.spawn((
-            bar_config.clone(),
-            metric_def.clone(),
-        ));
+    for bar_config in &bar_configs {
+        commands.spawn(bar_config.clone());
     }
 
     // Calculate layout dimensions from cached values
     let column_width = (bars_width - 12.0) / column_count as f32;
-    let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
+    let total_height = (bar_configs.len() as f32 / column_count as f32).ceil() * row_height;
 
     // Create bars root container below the graph (plain Node, not BarsContainer)
     let bars_root = commands
@@ -259,7 +291,7 @@ fn setup_hud(
     let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
     let mut bar_labels: Vec<Entity> = Vec::new();
 
-    for (_chunk_index, chunk) in bar_configs_and_metrics.chunks(column_count).enumerate() {
+    for (_chunk_index, chunk) in bar_configs.chunks(column_count).enumerate() {
         let row = commands
             .spawn((Node {
                 width: Val::Px(bars_width),
@@ -274,7 +306,7 @@ fn setup_hud(
             .id();
         commands.entity(row).insert(ChildOf(bars_root));
 
-        for (col_idx, (bar_config, metric_definition)) in chunk.iter().enumerate() {
+        for (col_idx, bar_config) in chunk.iter().enumerate() {
             // Create column container
             let column = commands
                 .spawn((Node {
@@ -294,8 +326,13 @@ fn setup_hud(
                 .id();
             commands.entity(column).insert(ChildOf(row));
 
+            // Get display config from provider registry
+            let display_config = provider_registry.get_display_config(&bar_config.metric_id);
+            let color = display_config
+                .map(|c| c.color)
+                .unwrap_or(Color::srgb(1.0, 1.0, 1.0));
+
             // Create bar material
-            let color = metric_definition.color;
             let mat = bar_mats.add(BarMaterial {
                 params: BarParams {
                     value: 0.0,
@@ -324,9 +361,8 @@ fn setup_hud(
             commands.entity(bar_entity).insert(ChildOf(column));
 
             // Create bar label
-            let base_label = metric_definition
-                .label
-                .clone()
+            let base_label = display_config
+                .and_then(|c| c.label.clone())
                 .unwrap_or_else(|| bar_config.metric_id.clone());
             let bar_label = commands
                 .spawn((
@@ -392,7 +428,13 @@ fn main() {
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_hud) // Create HUD with custom bars
-        .add_perf_metric_provider(NetworkLatencyMetric::default())
+        .add_perf_metric_provider(
+            NetworkLatencyMetric::new()
+                .with_label("Network Latency")
+                .with_unit("ms")
+                .with_precision(1)
+                .with_color(Color::srgb(0.65, 0.11, 0.0))
+        )
         .run();
 }
 

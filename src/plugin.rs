@@ -14,7 +14,7 @@ use bevy::{
 
 use crate::{
     initialize_bars_ui, sample_diagnostics, update_bars, update_graph, BarMaterial,
-    MetricProviders, MetricRegistry, MultiLineGraphMaterial,
+    MetricProviders, MetricRegistry, MultiLineGraphMaterial, ProviderRegistry, PerfMetricProvider,
 };
 
 /// Main plugin for the Bevy Performance HUD.
@@ -58,6 +58,8 @@ impl Plugin for BevyPerfHudPlugin {
             .add_plugins(UiMaterialPlugin::<BarMaterial>::default())
             // Initialize metric providers resource (this is still needed as global config)
             .init_resource::<MetricProviders>() // Registry of metric sources
+            // Initialize provider registry for display configuration
+            .init_resource::<ProviderRegistry>()
             // Initialize metric registry for metric definitions
             .init_resource::<MetricRegistry>()
             // Register systems for HUD lifecycle
@@ -76,6 +78,41 @@ impl Plugin for BevyPerfHudPlugin {
         app.world_mut()
             .resource_mut::<MetricProviders>()
             .ensure_default_entries();
+
+        // Cache display configurations from default providers
+        {
+            use crate::providers::{
+                FpsMetricProvider, FrameTimeMetricProvider, EntityCountMetricProvider,
+                SystemCpuUsageMetricProvider, SystemMemUsageMetricProvider,
+                ProcessCpuUsageMetricProvider, ProcessMemUsageMetricProvider,
+                ProviderDisplayConfig,
+            };
+
+            let world = app.world_mut();
+            let mut provider_registry = world.resource_mut::<ProviderRegistry>();
+
+            // Cache display config for each default provider
+            let providers: Vec<Box<dyn PerfMetricProvider>> = vec![
+                Box::new(FpsMetricProvider),
+                Box::new(FrameTimeMetricProvider),
+                Box::new(EntityCountMetricProvider),
+                Box::new(SystemCpuUsageMetricProvider),
+                Box::new(SystemMemUsageMetricProvider),
+                Box::new(ProcessCpuUsageMetricProvider),
+                Box::new(ProcessMemUsageMetricProvider),
+            ];
+
+            for provider in providers {
+                let metric_id = provider.metric_id().to_owned();
+                let display_config = ProviderDisplayConfig {
+                    label: provider.label(),
+                    unit: provider.unit(),
+                    precision: provider.precision(),
+                    color: provider.color(),
+                };
+                provider_registry.cache_display_config(metric_id, display_config);
+            }
+        }
 
         // Register default metric definitions
         app.world_mut()

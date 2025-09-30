@@ -1,5 +1,8 @@
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BarsContainer, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, MetricRegistry};
+use bevy_perf_hud::{
+    BarConfig, BarsContainer, BarsHandles, BevyPerfHudPlugin, MetricSampleContext, PerfHudAppExt,
+    PerfMetricProvider,
+};
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
 fn main() {
@@ -8,15 +11,33 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_bars_hud)
-        .add_perf_metric_provider(VariableMetric::new("variable/cpu_load", 0.0, 100.0))
-        .add_perf_metric_provider(VariableMetric::new("variable/memory_usage", 100.0, 2000.0))
-        .add_perf_metric_provider(SpikyMetric::new("spiky/latency", 10.0, 500.0))
+        .add_perf_metric_provider(
+            VariableMetric::new("variable/cpu_load", 0.0, 100.0)
+                .with_label("CPU (Fixed 0-100%)")
+                .with_unit("%")
+                .with_precision(1)
+                .with_color(Color::srgb(1.0, 0.3, 0.3)),
+        )
+        .add_perf_metric_provider(
+            VariableMetric::new("variable/memory_usage", 100.0, 2000.0)
+                .with_label("Memory (Auto)")
+                .with_unit("MB")
+                .with_precision(0)
+                .with_color(Color::srgb(0.3, 1.0, 0.3)),
+        )
+        .add_perf_metric_provider(
+            SpikyMetric::new("spiky/latency", 10.0, 500.0)
+                .with_label("Latency (P5-P95)")
+                .with_unit("ms")
+                .with_precision(1)
+                .with_color(Color::srgb(0.3, 0.3, 1.0)),
+        )
         .add_systems(Update, simulate_input)
         .run();
 }
 
 /// System wrapper to create bars-only HUD
-fn setup_bars_hud(mut commands: Commands, mut metric_registry: ResMut<MetricRegistry>) {
+fn setup_bars_hud(mut commands: Commands) {
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
     commands.entity(ui_cam).insert(Camera {
@@ -24,66 +45,19 @@ fn setup_bars_hud(mut commands: Commands, mut metric_registry: ResMut<MetricRegi
         ..default()
     });
 
-    // Configure custom bars with different scaling modes for the demo
-    let fixed_mode_metric = MetricDefinition {
-        id: "variable/cpu_load".into(),
-        label: Some("CPU (Fixed 0-100%)".into()),
-        unit: Some("%".into()),
-        precision: 1,
-        color: Color::srgb(1.0, 0.3, 0.3),
-    };
-
-    let auto_mode_metric = MetricDefinition {
-        id: "variable/memory_usage".into(),
-        label: Some("Memory (Auto)".into()),
-        unit: Some("MB".into()),
-        precision: 0,
-        color: Color::srgb(0.3, 1.0, 0.3),
-    };
-
-    let percentile_mode_metric = MetricDefinition {
-        id: "spiky/latency".into(),
-        label: Some("Latency (P5-P95)".into()),
-        unit: Some("ms".into()),
-        precision: 1,
-        color: Color::srgb(0.3, 0.3, 1.0),
-    };
-
-    // Register metrics in the registry
-    metric_registry.register(fixed_mode_metric.clone());
-    metric_registry.register(auto_mode_metric.clone());
-    metric_registry.register(percentile_mode_metric.clone());
-
-    // Spawn metric definitions as components
-    commands.spawn(fixed_mode_metric.clone());
-    commands.spawn(auto_mode_metric.clone());
-    commands.spawn(percentile_mode_metric.clone());
-
-    // Create BarConfig instances with different scaling modes using the new helper methods
-    let bar_configs_and_metrics = vec![
+    // Create BarConfig instances with different scaling modes
+    let bar_configs = vec![
         // Fixed mode bar - traditional static range
-        (
-            BarConfig::fixed_mode("variable/cpu_load", 0.0, 100.0),
-            fixed_mode_metric.clone()
-        ),
+        BarConfig::fixed_mode("variable/cpu_load", 0.0, 100.0),
         // Auto mode bar - adapts to data range with smoothing
-        (
-            BarConfig::auto_mode("variable/memory_usage", 0.0, 1000.0),
-            auto_mode_metric.clone()
-        ),
+        BarConfig::auto_mode("variable/memory_usage", 0.0, 1000.0),
         // Percentile mode bar - uses P5 to P95 range, good for spiky data
-        (
-            BarConfig::percentile_mode("spiky/latency", 0.0, 200.0),
-            percentile_mode_metric.clone()
-        ),
+        BarConfig::percentile_mode("spiky/latency", 0.0, 200.0),
     ];
-    
+
     // Spawn individual BarConfig entities for each bar
-    for (bar_config, metric_def) in &bar_configs_and_metrics {
-        commands.spawn((
-            bar_config.clone(),
-            metric_def.clone(),
-        ));
+    for bar_config in &bar_configs {
+        commands.spawn(bar_config.clone());
     }
 
     // Create BarsContainer with layout configuration
@@ -96,10 +70,11 @@ fn setup_bars_hud(mut commands: Commands, mut metric_registry: ResMut<MetricRegi
 
     let bars_width = bars_container.width;
     let row_height = bars_container.row_height;
-    let total_height = (bar_configs_and_metrics.len() as f32 / bars_container.column_count as f32).ceil() * row_height;
+    let total_height =
+        (bar_configs.len() as f32 / bars_container.column_count as f32).ceil() * row_height;
 
     // Spawn root UI node with BarsContainer
-    // BarsContainer automatically includes: BarsHandles, BarMaterials, SampledValues, BarScaleStates
+    //  automatically includes: BarsHandles, BarMaterials, SampledValues, BarScaleStates
     // The initialize_bars_ui system will populate BarsHandles and BarMaterials with actual entities
     commands.spawn((
         Node {
@@ -119,8 +94,6 @@ fn setup_bars_hud(mut commands: Commands, mut metric_registry: ResMut<MetricRegi
         bars_container,
     ));
 }
-
-
 
 /// Simulates keyboard input for controlling the demo
 fn simulate_input(
@@ -142,6 +115,10 @@ fn simulate_input(
 #[derive(Clone)]
 struct VariableMetric {
     id: String,
+    label: Option<String>,
+    unit: Option<String>,
+    color: Color,
+    precision: u32,
     time: f32,
     min_value: f32,
     max_value: f32,
@@ -152,11 +129,35 @@ impl VariableMetric {
     fn new(id: &str, min_value: f32, max_value: f32) -> Self {
         Self {
             id: id.to_string(),
+            label: None,
+            unit: None,
+            color: Color::srgb(1.0, 1.0, 1.0),
+            precision: 1,
             time: 0.0,
             min_value,
             max_value,
             current: (min_value + max_value) * 0.5,
         }
+    }
+
+    fn with_label(mut self, label: &str) -> Self {
+        self.label = Some(label.to_string());
+        self
+    }
+
+    fn with_unit(mut self, unit: &str) -> Self {
+        self.unit = Some(unit.to_string());
+        self
+    }
+
+    fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
+
+    fn with_precision(mut self, precision: u32) -> Self {
+        self.precision = precision;
+        self
     }
 }
 
@@ -184,12 +185,32 @@ impl PerfMetricProvider for VariableMetric {
 
         Some(self.current)
     }
+
+    fn label(&self) -> Option<String> {
+        self.label.clone()
+    }
+
+    fn unit(&self) -> Option<String> {
+        self.unit.clone()
+    }
+
+    fn precision(&self) -> u32 {
+        self.precision
+    }
+
+    fn color(&self) -> Color {
+        self.color
+    }
 }
 
 /// A metric that has occasional spikes, good for demonstrating percentile scaling
 #[derive(Clone)]
 struct SpikyMetric {
     id: String,
+    label: Option<String>,
+    unit: Option<String>,
+    color: Color,
+    precision: u32,
     time: f32,
     spike_timer: f32,
     min_value: f32,
@@ -201,12 +222,36 @@ impl SpikyMetric {
     fn new(id: &str, min_value: f32, max_value: f32) -> Self {
         Self {
             id: id.to_string(),
+            label: None,
+            unit: None,
+            color: Color::srgb(1.0, 1.0, 1.0),
+            precision: 1,
             time: 0.0,
             spike_timer: 0.0,
             min_value,
             max_value,
             base_value: min_value,
         }
+    }
+
+    fn with_label(mut self, label: &str) -> Self {
+        self.label = Some(label.to_string());
+        self
+    }
+
+    fn with_unit(mut self, unit: &str) -> Self {
+        self.unit = Some(unit.to_string());
+        self
+    }
+
+    fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
+
+    fn with_precision(mut self, precision: u32) -> Self {
+        self.precision = precision;
+        self
     }
 }
 
@@ -245,5 +290,21 @@ impl PerfMetricProvider for SpikyMetric {
         let result = self.base_value + spike_value;
 
         Some(result.clamp(self.min_value, self.max_value))
+    }
+
+    fn label(&self) -> Option<String> {
+        self.label.clone()
+    }
+
+    fn unit(&self) -> Option<String> {
+        self.unit.clone()
+    }
+
+    fn precision(&self) -> u32 {
+        self.precision
+    }
+
+    fn color(&self) -> Color {
+        self.color
     }
 }

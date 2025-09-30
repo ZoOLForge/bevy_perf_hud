@@ -2,7 +2,7 @@ use bevy::math::primitives::Cuboid;
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BevyPerfHudPlugin, HudHandles,
-    BarConfig, MetricDefinition, MetricRegistry,
+    BarConfig, ProviderRegistry,
     BarsContainer, BarsHandles,
     GraphConfig, GraphHandles, GraphLabelHandle, HistoryBuffers, GraphScaleState,
     MultiLineGraphMaterial, MultiLineGraphParams, MAX_CURVES
@@ -311,7 +311,7 @@ fn toggle_hud_mode_on_f1(
 fn setup_hud(
     mut commands: Commands,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
-    mut metric_registry: ResMut<MetricRegistry>,
+    provider_registry: Res<ProviderRegistry>,
 ) {
     use bevy_perf_hud::constants::{SYSTEM_CPU_USAGE_ID, SYSTEM_MEM_USAGE_ID};
 
@@ -321,16 +321,6 @@ fn setup_hud(
         order: 1,
         ..default()
     });
-
-    // Register FPS metric definition
-    let fps_metric = MetricDefinition {
-        id: "fps".into(),
-        label: Some("FPS (P5-P95)".into()),
-        unit: Some("fps".into()),
-        precision: 0,
-        color: Color::srgb(0.2, 0.8, 0.2),
-    };
-    metric_registry.register(fps_metric.clone());
 
     // Create root HUD entity with graph and bars components
     // BarsContainer brings in: BarsHandles, BarMaterials, SampledValues, BarScaleStates
@@ -386,8 +376,8 @@ fn setup_hud(
 
     // Write curve colors
     for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
-        let v = if let Some(metric_def) = metric_registry.get(&c.metric_id) {
-            metric_def.color.to_linear().to_vec4()
+        let v = if let Some(display_config) = provider_registry.get_display_config(&c.metric_id) {
+            display_config.color.to_linear().to_vec4()
         } else {
             Color::WHITE.to_linear().to_vec4()
         };
@@ -469,45 +459,25 @@ fn setup_hud(
         graph_label_width: label_width,
     });
 
-    // Get metrics from registry
-    let cpu_metric = metric_registry.get(SYSTEM_CPU_USAGE_ID).cloned().unwrap();
-    let mem_metric = metric_registry.get(SYSTEM_MEM_USAGE_ID).cloned().unwrap();
-    let entity_count_metric = metric_registry.get("entity_count").cloned().unwrap();
-
-    // Configure bars with different scaling modes using helper methods
-    let bar_configs_and_metrics = vec![
+    // Configure bars with different scaling modes
+    let bar_configs = vec![
         // CPU - fixed mode (0-100%)
-        (
-            BarConfig::fixed_mode(SYSTEM_CPU_USAGE_ID, 0.0, 100.0),
-            cpu_metric.clone()
-        ),
+        BarConfig::fixed_mode(SYSTEM_CPU_USAGE_ID, 0.0, 100.0),
         // Memory - fixed mode (0-100%)
-        (
-            BarConfig::fixed_mode(SYSTEM_MEM_USAGE_ID, 0.0, 100.0),
-            mem_metric.clone()
-        ),
+        BarConfig::fixed_mode(SYSTEM_MEM_USAGE_ID, 0.0, 100.0),
         // FPS - percentile mode to handle spikes
-        (
-            BarConfig::percentile_mode("fps", 0.0, 144.0),
-            fps_metric.clone()
-        ),
+        BarConfig::percentile_mode("fps", 0.0, 144.0),
         // Entity count - auto mode for dynamic range
-        (
-            BarConfig::auto_mode("entity_count", 0.0, 10000.0),
-            entity_count_metric.clone()
-        ),
+        BarConfig::auto_mode("entity_count", 0.0, 10000.0),
     ];
 
     // Spawn individual BarConfig entities for each bar
-    for (bar_config, metric_def) in &bar_configs_and_metrics {
-        commands.spawn((
-            bar_config.clone(),
-            metric_def.clone(),
-        ));
+    for bar_config in &bar_configs {
+        commands.spawn(bar_config.clone());
     }
 
     // Calculate layout dimensions from cached values
-    let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
+    let total_height = (bar_configs.len() as f32 / column_count as f32).ceil() * row_height;
 
     // Create bars root container below the graph (plain Node, not BarsContainer)
     let bars_root = commands
@@ -548,10 +518,6 @@ fn setup_hud(
         bar_materials: vec![], // Will be populated by initialize_bars_ui
         bar_labels: vec![], // Will be populated by initialize_bars_ui
     });
-}
-
-fn setup_scene(mut commands: Commands) {
-    commands.spawn(Camera2d);
 }
 
 fn main() {

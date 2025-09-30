@@ -19,9 +19,9 @@ use bevy::{
 };
 
 use crate::{
-    components::{BarConfig, GraphConfig, MetricRegistry, MetricDefinition, BarsHandles, BarMaterials, BarsContainer},
+    components::{BarConfig, GraphConfig, MetricRegistry, BarsHandles, BarMaterials, BarsContainer},
     constants::*,
-    providers::{MetricProviders, MetricSampleContext},
+    providers::{MetricProviders, MetricSampleContext, ProviderRegistry},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
     GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles,
     SampledValues,
@@ -35,7 +35,8 @@ pub fn create_hud(
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     metric_registry: Res<MetricRegistry>,
-    bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
+    bar_config_query: Query<&BarConfig>,
+    provider_registry: Res<ProviderRegistry>,
 ) {
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
@@ -183,7 +184,7 @@ pub fn create_hud(
     let mut bar_labels: Vec<Entity> = Vec::new();
 
     // Collect bar configurations from query
-    let bar_configs: Vec<(&BarConfig, &MetricDefinition)> = bar_config_query.iter().collect();
+    let bar_configs: Vec<&BarConfig> = bar_config_query.iter().collect();
 
     // Bars container placed below the graph
     let column_count = 2;
@@ -224,12 +225,16 @@ pub fn create_hud(
             .id();
         commands.entity(row).insert(ChildOf(bars_root_entity));
 
-        for (col_idx, (bar_cfg, metric_def)) in chunk.iter().enumerate() {
-            let base_label = metric_def
-                .label
-                .clone()
+        for (col_idx, bar_cfg) in chunk.iter().enumerate() {
+            // Get display config from provider registry
+            let display_config = provider_registry.get_display_config(&bar_cfg.metric_id);
+
+            let base_label = display_config
+                .and_then(|c| c.label.clone())
                 .unwrap_or_else(|| bar_cfg.metric_id.clone());
-            let color = metric_def.color;
+            let color = display_config
+                .map(|c| c.color)
+                .unwrap_or(Color::srgb(1.0, 1.0, 1.0));
 
             // Create column container
             let column = commands
@@ -790,13 +795,14 @@ pub fn update_graph(
 #[allow(clippy::too_many_arguments)]
 pub fn create_bar_ui_elements(
     _commands: Commands,
-    _bar_config_query: Query<(Entity, &BarConfig, &MetricDefinition), Changed<BarConfig>>,
+    _bar_config_query: Query<(Entity, &BarConfig), Changed<BarConfig>>,
     _bars_handles_query: Query<&mut BarsHandles>,
     _bar_mats: ResMut<Assets<BarMaterial>>,
+    _provider_registry: Res<ProviderRegistry>,
 ) {
     // Placeholder for a future implementation
     // This system would handle dynamic creation of bar UI elements
-    // For now, bar UI elements are created in create_hud function
+    // For now, bar UI elements are created in create_hud function or initialize_bars_ui
 }
 
 /// System that updates only the bars display with current performance data.
@@ -804,7 +810,7 @@ pub fn create_bar_ui_elements(
 /// Assumes UI elements have already been created by create_hud function.
 #[allow(clippy::too_many_arguments)]
 pub fn update_bars(
-    bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
+    bar_config_query: Query<&BarConfig>,
     mut bars_handles_query: Query<&mut BarsHandles>,
     mut bar_materials_query: Query<&mut BarMaterials>,
     mut sampled_values_query: Query<&mut SampledValues>,
@@ -812,7 +818,7 @@ pub fn update_bars(
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     mut label_text_q: Query<&mut Text>,
     mut label_color_q: Query<&mut TextColor>,
-    _metric_registry: Res<MetricRegistry>,
+    provider_registry: Res<ProviderRegistry>,
 ) {
     // Get global resources/components that are shared across all bars
     let Ok(samples) = sampled_values_query.single_mut() else {
@@ -830,11 +836,14 @@ pub fn update_bars(
 
     // Update bars (when enabled)
     let mut bar_index = 0;
-    for (bar_config, metric_definition) in bar_config_query.iter() {
+    for bar_config in bar_config_query.iter() {
         if bar_index >= materials.len() {
             break;
         }
-        
+
+        // Get display config from provider registry
+        let display_config = provider_registry.get_display_config(&bar_config.metric_id);
+
         let val = samples.get(&bar_config.metric_id).unwrap_or(0.0);
 
         // Get or create the scale state for this bar
@@ -861,7 +870,11 @@ pub fn update_bars(
 
         if let Some(mat) = bar_mats.get_mut(&materials[bar_index]) {
             mat.params.value = norm;
-            let v = metric_definition.color.to_linear().to_vec4();
+            // Use color from provider or default white
+            let color = display_config
+                .map(|c| c.color)
+                .unwrap_or(Color::srgb(1.0, 1.0, 1.0));
+            let v = color.to_linear().to_vec4();
             mat.params.r = v.x;
             mat.params.g = v.y;
             mat.params.b = v.z;
@@ -875,12 +888,11 @@ pub fn update_bars(
 
         // Update bar labels with current values and formatting
         if let Some(&label_entity) = h.bar_labels.get(bar_index) {
-            let base_label = metric_definition
-                .label
-                .clone()
+            let base_label = display_config
+                .and_then(|c| c.label.clone())
                 .unwrap_or_else(|| bar_config.metric_id.clone());
-            let precision = metric_definition.precision as usize;
-            let unit = metric_definition.unit.as_deref().unwrap_or("");
+            let precision = display_config.map(|c| c.precision).unwrap_or(1) as usize;
+            let unit = display_config.and_then(|c| c.unit.as_ref()).map(|s| s.as_str()).unwrap_or("");
 
             let formatted = if precision == 0 {
                 format!("{val:.0}")
@@ -926,16 +938,17 @@ pub fn initialize_bars_ui(
     mut commands: Commands,
     mut bar_mats: ResMut<Assets<BarMaterial>>,
     bars_container_query: Query<(Entity, &BarsContainer, Option<&BarsHandles>), Added<BarsContainer>>,
-    bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
+    bar_config_query: Query<&BarConfig>,
+    provider_registry: Res<ProviderRegistry>,
 ) {
     for (container_entity, bars_container, bars_handles_opt) in bars_container_query.iter() {
         // Collect all bar configurations
-        let bar_configs_and_metrics: Vec<(BarConfig, MetricDefinition)> = bar_config_query
+        let bar_configs: Vec<BarConfig> = bar_config_query
             .iter()
-            .map(|(cfg, def)| (cfg.clone(), def.clone()))
+            .map(|cfg| cfg.clone())
             .collect();
 
-        if bar_configs_and_metrics.is_empty() {
+        if bar_configs.is_empty() {
             continue;
         }
 
@@ -955,7 +968,7 @@ pub fn initialize_bars_ui(
         let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
         let mut bar_labels: Vec<Entity> = Vec::new();
 
-        for chunk in bar_configs_and_metrics.chunks(column_count) {
+        for chunk in bar_configs.chunks(column_count) {
             let row = commands
                 .spawn((Node {
                     width: Val::Px(bars_width),
@@ -970,7 +983,10 @@ pub fn initialize_bars_ui(
                 .id();
             commands.entity(row).insert(ChildOf(bars_parent));
 
-            for (col_idx, (bar_config, metric_definition)) in chunk.iter().enumerate() {
+            for (col_idx, bar_config) in chunk.iter().enumerate() {
+                // Get display config from provider registry
+                let display_config = provider_registry
+                    .get_display_config(&bar_config.metric_id);
                 // Create column container
                 let column = commands
                     .spawn((Node {
@@ -990,8 +1006,10 @@ pub fn initialize_bars_ui(
                     .id();
                 commands.entity(column).insert(ChildOf(row));
 
-                // Create bar material
-                let color = metric_definition.color;
+                // Create bar material using color from provider or default white
+                let color = display_config
+                    .map(|c| c.color)
+                    .unwrap_or(Color::srgb(1.0, 1.0, 1.0));
                 let mat = bar_mats.add(BarMaterial {
                     params: BarParams {
                         value: 0.0,
@@ -1019,10 +1037,9 @@ pub fn initialize_bars_ui(
                     .id();
                 commands.entity(bar_entity).insert(ChildOf(column));
 
-                // Create bar label
-                let base_label = metric_definition
-                    .label
-                    .clone()
+                // Create bar label using label from provider or metric ID
+                let base_label = display_config
+                    .and_then(|c| c.label.clone())
                     .unwrap_or_else(|| bar_config.metric_id.clone());
                 let bar_label = commands
                     .spawn((

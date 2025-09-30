@@ -5,6 +5,7 @@
 
 use bevy::{
     app::App,
+    color::Color,
     diagnostic::{
         DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
         SystemInformationDiagnosticsPlugin,
@@ -66,6 +67,27 @@ pub trait PerfMetricProvider: Send + Sync + 'static {
     /// # Returns
     /// The current metric value, or None if unavailable
     fn sample(&mut self, ctx: MetricSampleContext) -> Option<f32>;
+
+    /// Returns the display label for this metric.
+    /// If None, the metric_id will be used as the label.
+    fn label(&self) -> Option<String> {
+        None
+    }
+
+    /// Returns the unit string to display after values (e.g., "ms", "fps", "%").
+    fn unit(&self) -> Option<String> {
+        None
+    }
+
+    /// Returns the number of decimal places to display in values.
+    fn precision(&self) -> u32 {
+        1
+    }
+
+    /// Returns the color for this metric's visualization (curve/bar).
+    fn color(&self) -> Color {
+        Color::srgb(1.0, 1.0, 1.0)
+    }
 }
 
 /// Resource managing the registry of all metric providers.
@@ -175,6 +197,15 @@ pub struct ProviderMetadata {
     pub sample_metric_id: String,
 }
 
+/// Display configuration extracted from a provider.
+#[derive(Debug, Clone)]
+pub struct ProviderDisplayConfig {
+    pub label: Option<String>,
+    pub unit: Option<String>,
+    pub precision: u32,
+    pub color: Color,
+}
+
 /// Resource managing the registry of provider types and their metadata.
 ///
 /// This resource tracks which provider types have been registered in the
@@ -186,6 +217,8 @@ pub struct ProviderRegistry {
     registered_types: HashMap<TypeId, ProviderMetadata>,
     /// Map from metric ID to TypeId for reverse lookups
     metric_to_type: HashMap<String, TypeId>,
+    /// Cached display configuration from providers
+    display_configs: HashMap<String, ProviderDisplayConfig>,
 }
 
 impl ProviderRegistry {
@@ -199,6 +232,16 @@ impl ProviderRegistry {
 
         self.registered_types.insert(type_id, metadata);
         self.metric_to_type.insert(sample_metric_id, type_id);
+    }
+
+    /// Cache display configuration from a provider
+    pub fn cache_display_config(&mut self, metric_id: String, config: ProviderDisplayConfig) {
+        self.display_configs.insert(metric_id, config);
+    }
+
+    /// Get cached display configuration for a metric
+    pub fn get_display_config(&self, metric_id: &str) -> Option<&ProviderDisplayConfig> {
+        self.display_configs.get(metric_id)
     }
 
     /// Check if a provider type is registered
@@ -233,23 +276,35 @@ impl ProviderRegistry {
     /// provider types and registers them in the registry. It should be called
     /// by the plugin during initialization.
     pub fn ensure_default_provider_entities(&mut self, world: &mut World) {
-        // Spawn provider components for all built-in providers
-        world.spawn(ProviderComponent::new(FpsMetricProvider::default()));
-        world.spawn(ProviderComponent::new(FrameTimeMetricProvider::default()));
-        world.spawn(ProviderComponent::new(EntityCountMetricProvider::default()));
-        world.spawn(ProviderComponent::new(SystemCpuUsageMetricProvider::default()));
-        world.spawn(ProviderComponent::new(SystemMemUsageMetricProvider::default()));
-        world.spawn(ProviderComponent::new(ProcessCpuUsageMetricProvider::default()));
-        world.spawn(ProviderComponent::new(ProcessMemUsageMetricProvider::default()));
+        // Helper macro to spawn provider and cache its display config
+        macro_rules! register_provider {
+            ($provider:expr, $type:ty) => {
+                let provider = $provider;
+                let metric_id = provider.metric_id().to_owned();
 
-        // Register all the provider types
-        self.register::<FpsMetricProvider>("fps".to_owned());
-        self.register::<FrameTimeMetricProvider>("frame_time_ms".to_owned());
-        self.register::<EntityCountMetricProvider>("entity_count".to_owned());
-        self.register::<SystemCpuUsageMetricProvider>(SYSTEM_CPU_USAGE_ID.to_owned());
-        self.register::<SystemMemUsageMetricProvider>(SYSTEM_MEM_USAGE_ID.to_owned());
-        self.register::<ProcessCpuUsageMetricProvider>(PROCESS_CPU_USAGE_ID.to_owned());
-        self.register::<ProcessMemUsageMetricProvider>(PROCESS_MEM_USAGE_ID.to_owned());
+                // Cache display config
+                self.cache_display_config(metric_id.clone(), ProviderDisplayConfig {
+                    label: provider.label(),
+                    unit: provider.unit(),
+                    precision: provider.precision(),
+                    color: provider.color(),
+                });
+
+                // Spawn provider component
+                world.spawn(ProviderComponent::new(provider));
+
+                // Register type
+                self.register::<$type>(metric_id);
+            };
+        }
+
+        register_provider!(FpsMetricProvider::default(), FpsMetricProvider);
+        register_provider!(FrameTimeMetricProvider::default(), FrameTimeMetricProvider);
+        register_provider!(EntityCountMetricProvider::default(), EntityCountMetricProvider);
+        register_provider!(SystemCpuUsageMetricProvider::default(), SystemCpuUsageMetricProvider);
+        register_provider!(SystemMemUsageMetricProvider::default(), SystemMemUsageMetricProvider);
+        register_provider!(ProcessCpuUsageMetricProvider::default(), ProcessCpuUsageMetricProvider);
+        register_provider!(ProcessMemUsageMetricProvider::default(), ProcessMemUsageMetricProvider);
     }
 }
 
@@ -296,16 +351,26 @@ impl PerfHudAppExt for App {
     fn add_perf_metric_provider<P: PerfMetricProvider + Clone + 'static>(&mut self, provider: P) -> &mut Self {
         // Store provider using the new generic component system
         let metric_id = provider.metric_id().to_owned();
+
+        // Extract display configuration from provider
+        let display_config = ProviderDisplayConfig {
+            label: provider.label(),
+            unit: provider.unit(),
+            precision: provider.precision(),
+            color: provider.color(),
+        };
+
         let provider_component = ProviderComponent::new(provider.clone());
 
         // Spawn an entity with the provider component
         self.world_mut().spawn(provider_component);
 
-        // Register the provider type in the registry
+        // Register the provider type and cache display config
         self.init_resource::<ProviderRegistry>();
-        self.world_mut()
-            .resource_mut::<ProviderRegistry>()
-            .register::<P>(metric_id);
+        let mut registry = self.world_mut().resource_mut::<ProviderRegistry>();
+        registry.register::<P>(metric_id.clone());
+        registry.cache_display_config(metric_id, display_config);
+        drop(registry);
 
         // Add the sampling system for this provider type
         self.add_systems(
@@ -343,6 +408,22 @@ impl PerfMetricProvider for FpsMetricProvider {
             .average()?;
         Some(fps as f32)
     }
+
+    fn label(&self) -> Option<String> {
+        Some("FPS:".into())
+    }
+
+    fn unit(&self) -> Option<String> {
+        Some("fps".into())
+    }
+
+    fn precision(&self) -> u32 {
+        0
+    }
+
+    fn color(&self) -> Color {
+        Color::srgb(1.0, 1.0, 1.0)
+    }
 }
 
 /// Built-in metric provider for frame time in milliseconds.
@@ -363,6 +444,22 @@ impl PerfMetricProvider for FrameTimeMetricProvider {
             .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)?
             .smoothed()?;
         Some(frame_time as f32)
+    }
+
+    fn label(&self) -> Option<String> {
+        Some("FT:".into())
+    }
+
+    fn unit(&self) -> Option<String> {
+        Some("ms".into())
+    }
+
+    fn precision(&self) -> u32 {
+        1
+    }
+
+    fn color(&self) -> Color {
+        Color::srgb(0.4, 0.4, 0.4)
     }
 }
 
@@ -385,6 +482,18 @@ impl PerfMetricProvider for EntityCountMetricProvider {
             .value()?;
         Some(entities as f32)
     }
+
+    fn label(&self) -> Option<String> {
+        Some("Entities".into())
+    }
+
+    fn precision(&self) -> u32 {
+        0
+    }
+
+    fn color(&self) -> Color {
+        Color::srgb(0.56, 0.93, 0.56)
+    }
 }
 
 /// Built-in metric provider for system-wide CPU usage percentage.
@@ -405,6 +514,22 @@ impl PerfMetricProvider for SystemCpuUsageMetricProvider {
             .get(&SystemInformationDiagnosticsPlugin::SYSTEM_CPU_USAGE)?
             .value()?;
         Some(usage as f32)
+    }
+
+    fn label(&self) -> Option<String> {
+        Some("SysCPU".into())
+    }
+
+    fn unit(&self) -> Option<String> {
+        Some("%".into())
+    }
+
+    fn precision(&self) -> u32 {
+        1
+    }
+
+    fn color(&self) -> Color {
+        Color::srgb(0.96, 0.76, 0.18)
     }
 }
 
@@ -427,6 +552,22 @@ impl PerfMetricProvider for SystemMemUsageMetricProvider {
             .value()?;
         Some(usage as f32)
     }
+
+    fn label(&self) -> Option<String> {
+        Some("SysMem".into())
+    }
+
+    fn unit(&self) -> Option<String> {
+        Some("%".into())
+    }
+
+    fn precision(&self) -> u32 {
+        1
+    }
+
+    fn color(&self) -> Color {
+        Color::srgb(0.28, 0.56, 0.89)
+    }
 }
 
 /// Built-in metric provider for process-specific CPU usage percentage.
@@ -448,6 +589,22 @@ impl PerfMetricProvider for ProcessCpuUsageMetricProvider {
             .value()?;
         Some(usage as f32)
     }
+
+    fn label(&self) -> Option<String> {
+        Some("ProcCPU".into())
+    }
+
+    fn unit(&self) -> Option<String> {
+        Some("%".into())
+    }
+
+    fn precision(&self) -> u32 {
+        1
+    }
+
+    fn color(&self) -> Color {
+        Color::srgb(1.0, 0.64, 0.0)
+    }
 }
 
 /// Built-in metric provider for process-specific memory usage in bytes.
@@ -468,6 +625,22 @@ impl PerfMetricProvider for ProcessMemUsageMetricProvider {
             .get(&SystemInformationDiagnosticsPlugin::PROCESS_MEM_USAGE)?
             .value()?;
         Some(usage as f32)
+    }
+
+    fn label(&self) -> Option<String> {
+        Some("ProcMem".into())
+    }
+
+    fn unit(&self) -> Option<String> {
+        Some("MB".into())
+    }
+
+    fn precision(&self) -> u32 {
+        0
+    }
+
+    fn color(&self) -> Color {
+        Color::srgb(0.53, 0.81, 0.92)
     }
 }
 
