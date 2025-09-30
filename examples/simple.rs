@@ -3,9 +3,9 @@ use bevy::prelude::*;
 use bevy_perf_hud::{
     BevyPerfHudPlugin, HudHandles,
     BarConfig, MetricDefinition, MetricRegistry,
-    BarMaterial, BarParams, BarMaterials, BarsContainer, BarsHandles,
+    BarsContainer, BarsHandles,
     GraphConfig, GraphHandles, GraphLabelHandle, HistoryBuffers, GraphScaleState,
-    MultiLineGraphMaterial, MultiLineGraphParams, SampledValues, MAX_CURVES
+    MultiLineGraphMaterial, MultiLineGraphParams, MAX_CURVES
 };
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
@@ -310,7 +310,6 @@ fn toggle_hud_mode_on_f1(
 
 fn setup_hud(
     mut commands: Commands,
-    mut bar_mats: ResMut<Assets<BarMaterial>>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut metric_registry: ResMut<MetricRegistry>,
 ) {
@@ -508,7 +507,6 @@ fn setup_hud(
     }
 
     // Calculate layout dimensions from cached values
-    let column_width = (bars_width - 12.0) / column_count as f32;
     let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
 
     // Create bars root container below the graph (plain Node, not BarsContainer)
@@ -526,116 +524,19 @@ fn setup_hud(
         .id();
     commands.entity(bars_root).insert(ChildOf(hud_root));
 
-    // Create bar materials and labels for each bar configuration
-    let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
-    let mut bar_labels: Vec<Entity> = Vec::new();
-
-    for (_chunk_index, chunk) in bar_configs_and_metrics.chunks(column_count).enumerate() {
-        let row = commands
-            .spawn((Node {
-                width: Val::Px(bars_width),
-                height: Val::Px(row_height),
-                flex_direction: FlexDirection::Row,
-                margin: UiRect {
-                    top: Val::Px(1.0),
-                    ..default()
-                },
-                ..default()
-            },))
-            .id();
-        commands.entity(row).insert(ChildOf(bars_root));
-
-        for (col_idx, (bar_config, metric_definition)) in chunk.iter().enumerate() {
-            // Create column container
-            let column = commands
-                .spawn((Node {
-                    width: Val::Px(column_width),
-                    height: Val::Px(row_height),
-                    margin: UiRect {
-                        right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
-                            Val::Px(0.0)
-                        } else {
-                            Val::Px(8.0)
-                        },
-                        ..default()
-                    },
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },))
-                .id();
-            commands.entity(column).insert(ChildOf(row));
-
-            // Create bar material
-            let color = metric_definition.color;
-            let mat = bar_mats.add(BarMaterial {
-                params: BarParams {
-                    value: 0.0,
-                    r: color.to_linear().to_vec4().x,
-                    g: color.to_linear().to_vec4().y,
-                    b: color.to_linear().to_vec4().z,
-                    a: color.to_linear().to_vec4().w,
-                    bg_r: bar_config.bg_color.to_linear().to_vec4().x,
-                    bg_g: bar_config.bg_color.to_linear().to_vec4().y,
-                    bg_b: bar_config.bg_color.to_linear().to_vec4().z,
-                    bg_a: bar_config.bg_color.to_linear().to_vec4().w,
-                },
-            });
-
-            // Create bar entity
-            let bar_entity = commands
-                .spawn((
-                    MaterialNode(mat.clone()),
-                    Node {
-                        width: Val::Px(column_width),
-                        height: Val::Px(row_height - 4.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(bar_entity).insert(ChildOf(column));
-
-            // Create bar label
-            let base_label = metric_definition
-                .label
-                .clone()
-                .unwrap_or_else(|| bar_config.metric_id.clone());
-            let bar_label = commands
-                .spawn((
-                    Text::new(base_label),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 10.0,
-                        ..default()
-                    },
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(6.0),
-                        top: Val::Px(5.0),
-                        width: Val::Px(column_width - 12.0),
-                        overflow: Overflow::hidden(),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(bar_label).insert(ChildOf(bar_entity));
-
-            bar_materials.push(mat);
-            bar_labels.push(bar_label);
-        }
-    }
-
-    // Update the BarsHandles component (auto-created by BarsContainer on hud_root)
+    // Update BarsHandles to point to bars_root BEFORE the automatic system runs
+    // This tells initialize_bars_ui to create bars as children of bars_root
     commands.entity(hud_root).insert(BarsHandles {
         bars_root: Some(bars_root),
-        bar_labels: bar_labels.clone(),
+        bar_labels: vec![], // Will be populated by initialize_bars_ui
     });
 
-    // Update the BarMaterials component (auto-created by BarsContainer on hud_root)
-    commands.entity(hud_root).insert(BarMaterials {
-        materials: bar_materials.clone(),
-    });
+    // The initialize_bars_ui system will automatically create all bar UI child entities
+    // based on the BarConfig entities and the BarsContainer layout configuration.
+    // It will detect the bars_root from BarsHandles and use it as the parent.
 
-    // Update HudHandles on hud_root for toggle_hud_mode_on_f1 to work
+    // Update HudHandles for toggle_hud_mode_on_f1 to work
+    // Note: bar_materials and bar_labels will be populated by initialize_bars_ui
     commands.entity(hud_root).insert(HudHandles {
         root: Some(hud_root),
         graph_row: Some(graph_row),
@@ -644,9 +545,13 @@ fn setup_hud(
         graph_labels,
         graph_label_width: label_width,
         bars_root: Some(bars_root),
-        bar_materials,
-        bar_labels,
+        bar_materials: vec![], // Will be populated by initialize_bars_ui
+        bar_labels: vec![], // Will be populated by initialize_bars_ui
     });
+}
+
+fn setup_scene(mut commands: Commands) {
+    commands.spawn(Camera2d);
 }
 
 fn main() {

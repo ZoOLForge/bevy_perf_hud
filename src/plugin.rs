@@ -13,7 +13,7 @@ use bevy::{
 };
 
 use crate::{
-    sample_diagnostics, update_bars, update_graph, BarMaterial,
+    initialize_bars_ui, sample_diagnostics, update_bars, update_graph, BarMaterial,
     MetricProviders, MetricRegistry, MultiLineGraphMaterial,
 };
 
@@ -64,6 +64,8 @@ impl Plugin for BevyPerfHudPlugin {
             .add_systems(
                 Update,
                 (
+                    // Bar UI initialization runs first to create child entities
+                    initialize_bars_ui,
                     // Independent graph and bars systems
                     (sample_diagnostics, update_graph).chain(),
                     (sample_diagnostics, update_bars).chain(),

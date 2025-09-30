@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BarMaterial, BarMaterials, BarParams, BarsContainer, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, MetricRegistry};
+use bevy_perf_hud::{BarConfig, BarsContainer, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, MetricRegistry};
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
 fn main() {
@@ -16,7 +16,7 @@ fn main() {
 }
 
 /// System wrapper to create bars-only HUD
-fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMaterial>>, mut metric_registry: ResMut<MetricRegistry>) {
+fn setup_bars_hud(mut commands: Commands, mut metric_registry: ResMut<MetricRegistry>) {
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
     commands.entity(ui_cam).insert(Camera {
@@ -87,155 +87,37 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     }
 
     // Create BarsContainer with layout configuration
+    // The initialize_bars_ui system will automatically create all child UI entities
     let bars_container = BarsContainer {
         column_count: 2,
         width: 300.0,
         row_height: 24.0,
     };
 
-    // Cache layout values before moving bars_container
-    let column_count = bars_container.column_count;
     let bars_width = bars_container.width;
     let row_height = bars_container.row_height;
-    let column_width = (bars_width - 12.0) / column_count as f32;
-    let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
+    let total_height = (bar_configs_and_metrics.len() as f32 / bars_container.column_count as f32).ceil() * row_height;
 
-    // Spawn root UI node that contains both the HUD structure and bars
+    // Spawn root UI node with BarsContainer
     // BarsContainer automatically includes: BarsHandles, BarMaterials, SampledValues, BarScaleStates
-    let root = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(16.0),
-                left: Val::Px(20.0),
-                width: Val::Px(bars_width),
-                height: Val::Px(total_height),
-                flex_direction: FlexDirection::Column,
-                margin: UiRect {
-                    left: Val::Px(0.0), // No left margin for bars-only layout
-                    top: Val::Px(4.0),
-                    ..default()
-                },
+    // The initialize_bars_ui system will populate BarsHandles and BarMaterials with actual entities
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(16.0),
+            left: Val::Px(20.0),
+            width: Val::Px(bars_width),
+            height: Val::Px(total_height),
+            flex_direction: FlexDirection::Column,
+            margin: UiRect {
+                left: Val::Px(0.0), // No left margin for bars-only layout
+                top: Val::Px(4.0),
                 ..default()
             },
-            bars_container,
-        ))
-        .id();
-
-    // Create bar materials and labels for each bar configuration
-    let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
-    let mut bar_labels: Vec<Entity> = Vec::new();
-
-    for (_chunk_index, chunk) in bar_configs_and_metrics.chunks(column_count).enumerate() {
-        let row = commands
-            .spawn((Node {
-                width: Val::Px(bars_width),
-                height: Val::Px(row_height),
-                flex_direction: FlexDirection::Row,
-                margin: UiRect {
-                    top: Val::Px(1.0),
-                    ..default()
-                },
-                ..default()
-            },))
-            .id();
-        commands.entity(row).insert(ChildOf(root)); // Attach to root instead of bars_root
-
-        for (col_idx, (bar_config, metric_definition)) in chunk.iter().enumerate() {
-            // Create column container
-            let column = commands
-                .spawn((Node {
-                    width: Val::Px(column_width),
-                    height: Val::Px(row_height),
-                    margin: UiRect {
-                        right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
-                            Val::Px(0.0)
-                        } else {
-                            Val::Px(8.0)
-                        },
-                        ..default()
-                    },
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },))
-                .id();
-            commands.entity(column).insert(ChildOf(row));
-
-            // Create bar material
-            let color = metric_definition.color;
-            let mat = bar_mats.add(BarMaterial {
-                params: BarParams {
-                    value: 0.0,
-                    r: color.to_linear().to_vec4().x,
-                    g: color.to_linear().to_vec4().y,
-                    b: color.to_linear().to_vec4().z,
-                    a: color.to_linear().to_vec4().w,
-                    bg_r: bar_config.bg_color.to_linear().to_vec4().x,
-                    bg_g: bar_config.bg_color.to_linear().to_vec4().y,
-                    bg_b: bar_config.bg_color.to_linear().to_vec4().z,
-                    bg_a: bar_config.bg_color.to_linear().to_vec4().w,
-                },
-            });
-
-            // Create bar entity
-            let bar_entity = commands
-                .spawn((
-                    MaterialNode(mat.clone()),
-                    Node {
-                        width: Val::Px(column_width),
-                        height: Val::Px(row_height - 4.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(bar_entity).insert(ChildOf(column));
-
-            // Create bar label
-            let base_label = metric_definition
-                .label
-                .clone()
-                .unwrap_or_else(|| bar_config.metric_id.clone());
-            let bar_label = commands
-                .spawn((
-                    Text::new(base_label),
-                    TextColor(Color::WHITE),
-                    TextFont {
-                        font_size: 10.0,
-                        ..default()
-                    },
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(6.0),
-                        top: Val::Px(5.0),
-                        width: Val::Px(column_width - 12.0),
-                        overflow: Overflow::hidden(),
-                        ..default()
-                    },
-                ))
-                .id();
-            commands.entity(bar_label).insert(ChildOf(bar_entity));
-
-            bar_materials.push(mat);
-            bar_labels.push(bar_label);
-
-            // Spawn the bar configuration entity
-            commands.spawn((
-                bar_config.clone(),
-                metric_definition.clone(),
-            ));
-        }
-    }
-
-    // Update the BarsHandles component (auto-created by BarsContainer) with actual entity handles
-    commands.entity(root).insert(BarsHandles {
-        bars_root: None, // No separate bars_root since we merged them
-        bar_labels,
-    });
-
-    // Update the BarMaterials component (auto-created by BarsContainer) with actual materials
-    commands.entity(root).insert(BarMaterials {
-        materials: bar_materials,
-    });
+            ..default()
+        },
+        bars_container,
+    ));
 }
 
 

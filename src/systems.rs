@@ -913,4 +913,153 @@ pub fn update_bars(
     }
 }
 
+/// System that automatically creates bar UI entities when a BarsContainer is added.
+/// This eliminates the need for manual UI hierarchy creation in setup functions.
+///
+/// Queries for newly added BarsContainer components and all BarConfig + MetricDefinition entities,
+/// then generates the complete UI hierarchy (rows → columns → bars → labels) based on the
+/// BarsContainer layout configuration.
+///
+/// If the entity has a BarsHandles component with a bars_root set, bars will be created as children
+/// of that bars_root. Otherwise, bars will be created as direct children of the BarsContainer entity.
+pub fn initialize_bars_ui(
+    mut commands: Commands,
+    mut bar_mats: ResMut<Assets<BarMaterial>>,
+    bars_container_query: Query<(Entity, &BarsContainer, Option<&BarsHandles>), Added<BarsContainer>>,
+    bar_config_query: Query<(&BarConfig, &MetricDefinition)>,
+) {
+    for (container_entity, bars_container, bars_handles_opt) in bars_container_query.iter() {
+        // Collect all bar configurations
+        let bar_configs_and_metrics: Vec<(BarConfig, MetricDefinition)> = bar_config_query
+            .iter()
+            .map(|(cfg, def)| (cfg.clone(), def.clone()))
+            .collect();
+
+        if bar_configs_and_metrics.is_empty() {
+            continue;
+        }
+
+        // Extract layout configuration
+        let column_count = bars_container.column_count;
+        let bars_width = bars_container.width;
+        let row_height = bars_container.row_height;
+        let column_width = (bars_width - 12.0) / column_count as f32;
+
+        // Determine the parent entity for bar rows:
+        // If there's a bars_root in BarsHandles, use it; otherwise use the container itself
+        let bars_parent = bars_handles_opt
+            .and_then(|h| h.bars_root)
+            .unwrap_or(container_entity);
+
+        // Create bar materials and labels for each bar configuration
+        let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
+        let mut bar_labels: Vec<Entity> = Vec::new();
+
+        for chunk in bar_configs_and_metrics.chunks(column_count) {
+            let row = commands
+                .spawn((Node {
+                    width: Val::Px(bars_width),
+                    height: Val::Px(row_height),
+                    flex_direction: FlexDirection::Row,
+                    margin: UiRect {
+                        top: Val::Px(1.0),
+                        ..default()
+                    },
+                    ..default()
+                },))
+                .id();
+            commands.entity(row).insert(ChildOf(bars_parent));
+
+            for (col_idx, (bar_config, metric_definition)) in chunk.iter().enumerate() {
+                // Create column container
+                let column = commands
+                    .spawn((Node {
+                        width: Val::Px(column_width),
+                        height: Val::Px(row_height),
+                        margin: UiRect {
+                            right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
+                                Val::Px(0.0)
+                            } else {
+                                Val::Px(8.0)
+                            },
+                            ..default()
+                        },
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },))
+                    .id();
+                commands.entity(column).insert(ChildOf(row));
+
+                // Create bar material
+                let color = metric_definition.color;
+                let mat = bar_mats.add(BarMaterial {
+                    params: BarParams {
+                        value: 0.0,
+                        r: color.to_linear().to_vec4().x,
+                        g: color.to_linear().to_vec4().y,
+                        b: color.to_linear().to_vec4().z,
+                        a: color.to_linear().to_vec4().w,
+                        bg_r: bar_config.bg_color.to_linear().to_vec4().x,
+                        bg_g: bar_config.bg_color.to_linear().to_vec4().y,
+                        bg_b: bar_config.bg_color.to_linear().to_vec4().z,
+                        bg_a: bar_config.bg_color.to_linear().to_vec4().w,
+                    },
+                });
+
+                // Create bar entity
+                let bar_entity = commands
+                    .spawn((
+                        MaterialNode(mat.clone()),
+                        Node {
+                            width: Val::Px(column_width),
+                            height: Val::Px(row_height - 4.0),
+                            ..default()
+                        },
+                    ))
+                    .id();
+                commands.entity(bar_entity).insert(ChildOf(column));
+
+                // Create bar label
+                let base_label = metric_definition
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| bar_config.metric_id.clone());
+                let bar_label = commands
+                    .spawn((
+                        Text::new(base_label),
+                        TextColor(Color::WHITE),
+                        TextFont {
+                            font_size: 10.0,
+                            ..default()
+                        },
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(6.0),
+                            top: Val::Px(5.0),
+                            width: Val::Px(column_width - 12.0),
+                            overflow: Overflow::hidden(),
+                            ..default()
+                        },
+                    ))
+                    .id();
+                commands.entity(bar_label).insert(ChildOf(bar_entity));
+
+                bar_materials.push(mat);
+                bar_labels.push(bar_label);
+            }
+        }
+
+        // Update the BarsHandles component (auto-created by BarsContainer)
+        commands.entity(container_entity).insert(BarsHandles {
+            bars_root: None,
+            bar_labels: bar_labels.clone(),
+        });
+
+        // Update the BarMaterials component (auto-created by BarsContainer)
+        commands.entity(container_entity).insert(BarMaterials {
+            materials: bar_materials.clone(),
+        });
+    }
+}
+
 
