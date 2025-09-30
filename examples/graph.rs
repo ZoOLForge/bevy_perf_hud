@@ -15,10 +15,10 @@
 
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    BevyPerfHudPlugin, CurveConfig, CurveDefaults, GraphBorder, GraphConfig, GraphHandles,
-    GraphLabelHandle, GraphScaleState, HistoryBuffers, MetricDefinition, MetricRegistry,
-    MetricSampleContext, MultiLineGraphMaterial, MultiLineGraphParams, PerfHudAppExt,
-    PerfMetricProvider, ProviderRegistry, SampledValues, MAX_CURVES,
+    BevyPerfHudPlugin, CurveConfig, CurveDefaults, GraphBorder, GraphConfig, GraphContainer,
+    GraphHandles, GraphLabelHandle, MetricDefinition, MetricRegistry, MetricSampleContext,
+    MultiLineGraphMaterial, MultiLineGraphParams, PerfHudAppExt, PerfMetricProvider,
+    ProviderRegistry, MAX_CURVES,
 };
 fn main() {
     App::new()
@@ -125,6 +125,13 @@ fn setup_graph_hud(
         y_scale_smoothing: 0.3,
     };
 
+    // Create GraphContainer - automatically includes GraphHandles, GraphConfig,
+    // HistoryBuffers, GraphScaleState, SampledValues, and Visibility
+    let graph_container = GraphContainer {
+        size: graph_config.size,
+        label_width: graph_config.label_width,
+    };
+
     // Create root entity with graph components
     let hud_root = commands
         .spawn((
@@ -136,13 +143,9 @@ fn setup_graph_hud(
                 ..default()
             },
             graph_config.clone(),
-            GraphHandles::default(),
-            HistoryBuffers::default(),
-            GraphScaleState::default(),
-            SampledValues::default(),
+            graph_container,
         ))
         .id();
-    commands.entity(hud_root).insert(Visibility::Visible);
 
     // Create graph UI
     let mut graph_params = MultiLineGraphParams::default();
