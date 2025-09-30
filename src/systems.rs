@@ -19,7 +19,7 @@ use bevy::{
 };
 
 use crate::{
-    components::{BarConfig, GraphConfig, MetricRegistry, MetricDefinition, BarsHandles, BarMaterials},
+    components::{BarConfig, GraphConfig, MetricRegistry, MetricDefinition, BarsHandles, BarMaterials, BarsContainer},
     constants::*,
     providers::{MetricProviders, MetricSampleContext},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
@@ -48,6 +48,7 @@ pub fn create_hud(
     // This allows full customization of which bars to display and their configuration
 
     // Spawn root UI node with default settings as components
+    // BarsContainer automatically includes: BarsHandles, BarMaterials, SampledValues, BarScaleStates
     let root = commands
         .spawn((
             Node {
@@ -60,12 +61,9 @@ pub fn create_hud(
             GraphConfig::default(),
             HudHandles::default(),
             GraphHandles::default(),
-            BarsHandles::default(),
-            BarMaterials::default(),
-            SampledValues::default(),
+            BarsContainer,
             HistoryBuffers::default(),
             GraphScaleState::default(),
-            crate::BarScaleStates::default(),
         ))
         .id();
     commands.entity(root).insert(Visibility::Visible);

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_perf_hud::{BarConfig, BarMaterial, BarParams, BarScaleMode, BarScaleStates, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, SampledValues, MetricRegistry, BarMaterials};
+use bevy_perf_hud::{BarConfig, BarMaterial, BarMaterials, BarParams, BarsContainer, BarsHandles, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, MetricRegistry};
 
 /// Demonstrates different bar scaling modes for dynamic range adjustment
 fn main() {
@@ -94,6 +94,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
 
     // Spawn root UI node that contains both the HUD structure and bars
+    // BarsContainer automatically includes: BarsHandles, BarMaterials, SampledValues, BarScaleStates
     let root = commands
         .spawn((
             Node {
@@ -110,9 +111,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
                 },
                 ..default()
             },
-            BarsHandles::default(),
-            SampledValues::default(),
-            BarScaleStates::default(),
+            BarsContainer,
         ))
         .id();
     commands.entity(root).insert(Visibility::Visible);
@@ -221,13 +220,13 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         }
     }
 
-    // Update the BarsHandles component on the root entity
+    // Update the BarsHandles component (auto-created by BarsContainer) with actual entity handles
     commands.entity(root).insert(BarsHandles {
         bars_root: None, // No separate bars_root since we merged them
         bar_labels,
     });
-    
-    // Create and insert the BarMaterials component with the bar materials
+
+    // Update the BarMaterials component (auto-created by BarsContainer) with actual materials
     commands.entity(root).insert(BarMaterials {
         materials: bar_materials,
     });

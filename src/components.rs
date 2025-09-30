@@ -81,7 +81,7 @@ pub struct BarsHandles {
 }
 
 /// Component storing material handles for bar rendering.
-/// 
+///
 /// This component contains the material handles used to render performance bars.
 /// It's separate from BarsHandles to allow more granular querying and updating.
 #[derive(Component, Default)]
@@ -89,6 +89,19 @@ pub struct BarMaterials {
     /// Material handles for bar shaders
     pub materials: Vec<Handle<BarMaterial>>,
 }
+
+/// Marker component for bar container entities.
+///
+/// This component automatically includes all required components for bar rendering
+/// using Bevy 0.15's Required Components feature. Simply add this component to
+/// an entity and Bevy will automatically attach:
+/// - `BarsHandles`: Entity handles for bars UI elements
+/// - `BarMaterials`: Material handles for bar shaders
+/// - `SampledValues`: Current metric values cache
+/// - `BarScaleStates`: Dynamic scaling state for bars
+#[derive(Component, Default)]
+#[require(BarsHandles, BarMaterials, SampledValues, BarScaleStates)]
+pub struct BarsContainer;
 
 impl BarMaterials {
     /// Create new BarMaterials with empty materials list
