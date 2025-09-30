@@ -19,12 +19,12 @@ use bevy::{
 };
 
 use crate::{
-    components::{BarConfig, GraphConfig, MetricRegistry, BarsHandles, BarMaterials, BarsContainer},
+    bar_components::{BarConfig, BarMaterials, BarsContainer, BarsHandles},
+    components::{HudHandles, MetricRegistry, SampledValues},
     constants::*,
+    graph_components::{GraphConfig, GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers},
     providers::{MetricProviders, MetricSampleContext, ProviderRegistry},
     render::{BarMaterial, BarParams, MultiLineGraphMaterial, MultiLineGraphParams},
-    GraphHandles, GraphLabelHandle, GraphScaleState, HistoryBuffers, HudHandles,
-    SampledValues,
 };
 
 /// Function that creates all HUD UI entities and materials.
