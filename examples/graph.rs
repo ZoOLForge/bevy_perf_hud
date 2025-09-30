@@ -16,9 +16,9 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
     BevyPerfHudPlugin, CurveConfig, CurveDefaults, GraphBorder, GraphConfig, GraphHandles,
-    GraphLabelHandle, GraphScaleState, HistoryBuffers, MetricSampleContext,
-    MultiLineGraphMaterial, MultiLineGraphParams, PerfHudAppExt, PerfMetricProvider,
-    ProviderRegistry, SampledValues, MAX_CURVES,
+    GraphLabelHandle, GraphScaleState, HistoryBuffers, MetricDefinition, MetricRegistry,
+    MetricSampleContext, MultiLineGraphMaterial, MultiLineGraphParams, PerfHudAppExt,
+    PerfMetricProvider, ProviderRegistry, SampledValues, MAX_CURVES,
 };
 fn main() {
     App::new()
@@ -50,6 +50,7 @@ fn setup_graph_hud(
     mut commands: Commands,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     provider_registry: Res<ProviderRegistry>,
+    mut metric_registry: ResMut<MetricRegistry>,
 ) {
     // UI 2D camera: render after 3D to avoid conflicts
     let ui_cam = commands.spawn(Camera2d).id();
@@ -57,6 +58,20 @@ fn setup_graph_hud(
         order: 1,
         ..default()
     });
+
+    // Register metric definitions with MetricRegistry so update_graph can find the colors
+    // This is necessary because update_graph system queries MetricRegistry for colors
+    for metric_id in ["wave/smooth", "noise/raw", "step/quantized"] {
+        if let Some(display_config) = provider_registry.get_display_config(metric_id) {
+            metric_registry.register(MetricDefinition {
+                id: metric_id.to_string(),
+                label: display_config.label.clone(),
+                unit: display_config.unit.clone(),
+                precision: display_config.precision,
+                color: display_config.color,
+            });
+        }
+    }
 
     // Configure graph with different curve settings
     let graph_config = GraphConfig {
