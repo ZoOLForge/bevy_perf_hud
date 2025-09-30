@@ -4,8 +4,7 @@ use bevy_perf_hud::{
     BevyPerfHudPlugin, HudHandles,
     BarConfig, ProviderRegistry,
     BarsContainer, BarsHandles,
-    GraphConfig, GraphHandles, GraphLabelHandle, HistoryBuffers, GraphScaleState,
-    MultiLineGraphMaterial, MultiLineGraphParams, MAX_CURVES
+    GraphConfig, GraphContainer, CurveConfig,
 };
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
@@ -310,8 +309,8 @@ fn toggle_hud_mode_on_f1(
 
 fn setup_hud(
     mut commands: Commands,
-    mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     provider_registry: Res<ProviderRegistry>,
+    mut metric_registry: ResMut<bevy_perf_hud::MetricRegistry>,
 ) {
     use bevy_perf_hud::constants::{SYSTEM_CPU_USAGE_ID, SYSTEM_MEM_USAGE_ID};
 
@@ -322,9 +321,42 @@ fn setup_hud(
         ..default()
     });
 
-    // Create root HUD entity with graph and bars components
-    // BarsContainer brings in: BarsHandles, BarMaterials, SampledValues, BarScaleStates
+    // Register metric definitions with MetricRegistry so update_graph can find the colors
+    for metric_id in ["frame_time_ms", "fps"] {
+        if let Some(display_config) = provider_registry.get_display_config(metric_id) {
+            metric_registry.register(bevy_perf_hud::MetricDefinition {
+                id: metric_id.to_string(),
+                label: display_config.label.clone(),
+                unit: display_config.unit.clone(),
+                precision: display_config.precision,
+                color: display_config.color,
+            });
+        }
+    }
+
+    // Spawn CurveConfig entities for the default graph curves
+    commands.spawn(CurveConfig {
+        metric_id: "frame_time_ms".into(),
+        autoscale: Some(true),
+        smoothing: Some(0.2),
+        quantize_step: Some(1.0),
+    });
+
+    commands.spawn(CurveConfig {
+        metric_id: "fps".into(),
+        autoscale: Some(true),
+        smoothing: Some(0.2),
+        quantize_step: Some(1.0),
+    });
+
+    // Create GraphContainer and GraphConfig
     let graph_config = GraphConfig::default();
+    let graph_container = GraphContainer {
+        size: graph_config.size,
+        label_width: graph_config.label_width,
+    };
+
+    // Create BarsContainer
     let bars_container = BarsContainer {
         column_count: 2,
         width: 300.0,
@@ -336,6 +368,9 @@ fn setup_hud(
     let bars_width = bars_container.width;
     let row_height = bars_container.row_height;
 
+    // Create root HUD entity with graph and bars components
+    // GraphContainer brings in: GraphHandles, GraphConfig, HistoryBuffers, GraphScaleState, SampledValues, Visibility
+    // BarsContainer brings in: BarsHandles, BarMaterials, SampledValues, BarScaleStates
     let hud_root = commands
         .spawn((
             Node {
@@ -345,119 +380,12 @@ fn setup_hud(
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            graph_config.clone(),
+            graph_config,
+            graph_container,
             HudHandles::default(),
-            GraphHandles::default(),
-            HistoryBuffers::default(),
-            GraphScaleState::default(),
-            bars_container, // BarsContainer automatically brings SampledValues
+            bars_container,
         ))
         .id();
-    commands.entity(hud_root).insert(Visibility::Visible);
-
-    // Create graph UI
-    let mut graph_params = MultiLineGraphParams::default();
-    graph_params.length = 0;
-    graph_params.min_y = graph_config.min_y;
-    graph_params.max_y = graph_config.max_y;
-    graph_params.thickness = graph_config.thickness;
-    graph_params.bg_color = graph_config.bg_color.to_linear().to_vec4();
-    graph_params.border_color = graph_config.border.color.to_linear().to_vec4();
-    graph_params.border_thickness = graph_config.border.thickness;
-    graph_params.border_thickness_uv_x =
-        (graph_config.border.thickness / graph_config.size.x).max(0.0001);
-    graph_params.border_thickness_uv_y =
-        (graph_config.border.thickness / graph_config.size.y).max(0.0001);
-    graph_params.border_left = if graph_config.border.left { 1 } else { 0 };
-    graph_params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
-    graph_params.border_right = if graph_config.border.right { 1 } else { 0 };
-    graph_params.border_top = if graph_config.border.top { 1 } else { 0 };
-    graph_params.curve_count = graph_config.curves.len().min(MAX_CURVES) as u32;
-
-    // Write curve colors
-    for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
-        let v = if let Some(display_config) = provider_registry.get_display_config(&c.metric_id) {
-            display_config.color.to_linear().to_vec4()
-        } else {
-            Color::WHITE.to_linear().to_vec4()
-        };
-        graph_params.colors[i] = v;
-    }
-
-    // Create graph row container
-    let label_width = graph_config.label_width.max(40.0);
-    let graph_row = commands
-        .spawn((Node {
-            width: Val::Px(graph_config.size.x + label_width),
-            height: Val::Px(graph_config.size.y),
-            flex_direction: FlexDirection::Row,
-            ..default()
-        },))
-        .id();
-    commands.entity(graph_row).insert(ChildOf(hud_root));
-    commands.entity(graph_row).insert(Visibility::Visible);
-
-    // Create label container
-    let label_container = commands
-        .spawn((Node {
-            width: Val::Px(label_width),
-            height: Val::Px(graph_config.size.y),
-            flex_direction: FlexDirection::Column,
-            ..default()
-        },))
-        .id();
-    commands.entity(label_container).insert(ChildOf(graph_row));
-
-    // Create graph labels
-    let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
-    for curve in graph_config.curves.iter().take(MAX_CURVES) {
-        let eid = commands
-            .spawn((
-                Text::new(""),
-                TextColor(Color::WHITE),
-                TextFont {
-                    font_size: 10.0,
-                    ..default()
-                },
-                Node {
-                    width: Val::Px(label_width),
-                    height: Val::Px(16.0),
-                    ..default()
-                },
-            ))
-            .id();
-        commands.entity(eid).insert(ChildOf(label_container));
-        graph_labels.push(GraphLabelHandle {
-            metric_id: curve.metric_id.clone(),
-            entity: eid,
-        });
-    }
-
-    // Create graph material and entity
-    let graph_material = graph_mats.add(MultiLineGraphMaterial {
-        params: graph_params,
-    });
-    let graph_entity = commands
-        .spawn((
-            MaterialNode(graph_material.clone()),
-            Node {
-                width: Val::Px(graph_config.size.x),
-                height: Val::Px(graph_config.size.y),
-                ..default()
-            },
-        ))
-        .id();
-    commands.entity(graph_entity).insert(ChildOf(graph_row));
-
-    // Update GraphHandles
-    commands.entity(hud_root).insert(GraphHandles {
-        root: Some(hud_root),
-        graph_row: Some(graph_row),
-        graph_entity: Some(graph_entity),
-        graph_material: Some(graph_material.clone()),
-        graph_labels: graph_labels.clone(),
-        graph_label_width: label_width,
-    });
 
     // Configure bars with different scaling modes
     let bar_configs = vec![
@@ -501,19 +429,19 @@ fn setup_hud(
         bar_labels: vec![], // Will be populated by initialize_bars_ui
     });
 
-    // The initialize_bars_ui system will automatically create all bar UI child entities
-    // based on the BarConfig entities and the BarsContainer layout configuration.
-    // It will detect the bars_root from BarsHandles and use it as the parent.
+    // The initialize_bars_ui and initialize_graph_ui systems will automatically create
+    // all UI child entities based on BarConfig and CurveConfig entities.
+    // No need to manually create graph UI - it will be handled automatically.
 
     // Update HudHandles for toggle_hud_mode_on_f1 to work
-    // Note: bar_materials and bar_labels will be populated by initialize_bars_ui
+    // Note: Graph and bar elements will be populated by initialize_graph_ui and initialize_bars_ui
     commands.entity(hud_root).insert(HudHandles {
         root: Some(hud_root),
-        graph_row: Some(graph_row),
-        graph_entity: Some(graph_entity),
-        graph_material: Some(graph_material),
-        graph_labels,
-        graph_label_width: label_width,
+        graph_row: None, // Will be populated by initialize_graph_ui
+        graph_entity: None, // Will be populated by initialize_graph_ui
+        graph_material: None, // Will be populated by initialize_graph_ui
+        graph_labels: vec![], // Will be populated by initialize_graph_ui
+        graph_label_width: 0.0, // Will be populated by initialize_graph_ui
         bars_root: Some(bars_root),
         bar_materials: vec![], // Will be populated by initialize_bars_ui
         bar_labels: vec![], // Will be populated by initialize_bars_ui
