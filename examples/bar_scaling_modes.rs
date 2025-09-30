@@ -86,11 +86,18 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
         ));
     }
 
-    // Define UI layout parameters
-    let column_count = 2;
-    let default_width = 300.0; // Use a default width for bars-only layout
-    let column_width = (default_width - 12.0) / column_count as f32;
-    let row_height = 24.0;
+    // Create BarsContainer with layout configuration
+    let bars_container = BarsContainer {
+        column_count: 2,
+        width: 300.0,
+        row_height: 24.0,
+    };
+
+    // Cache layout values before moving bars_container
+    let column_count = bars_container.column_count;
+    let bars_width = bars_container.width;
+    let row_height = bars_container.row_height;
+    let column_width = (bars_width - 12.0) / column_count as f32;
     let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
 
     // Spawn root UI node that contains both the HUD structure and bars
@@ -101,7 +108,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
                 position_type: PositionType::Absolute,
                 top: Val::Px(16.0),
                 left: Val::Px(20.0),
-                width: Val::Px(default_width),
+                width: Val::Px(bars_width),
                 height: Val::Px(total_height),
                 flex_direction: FlexDirection::Column,
                 margin: UiRect {
@@ -111,10 +118,9 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
                 },
                 ..default()
             },
-            BarsContainer,
+            bars_container,
         ))
         .id();
-    commands.entity(root).insert(Visibility::Visible);
 
     // Create bar materials and labels for each bar configuration
     let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
@@ -123,7 +129,7 @@ fn setup_bars_hud(mut commands: Commands, mut bar_mats: ResMut<Assets<BarMateria
     for (_chunk_index, chunk) in bar_configs_and_metrics.chunks(column_count).enumerate() {
         let row = commands
             .spawn((Node {
-                width: Val::Px(default_width),
+                width: Val::Px(bars_width),
                 height: Val::Px(row_height),
                 flex_direction: FlexDirection::Row,
                 margin: UiRect {

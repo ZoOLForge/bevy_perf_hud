@@ -3,6 +3,7 @@
 //! This module contains all component types used by the HUD systems to store
 //! state directly on entities instead of using global resources.
 
+use bevy::prelude::Visibility;
 use bevy::{asset::Handle, ecs::entity::Entity, prelude::{Component, Resource}, color::Color, math::Vec2};
 use std::collections::{HashMap, VecDeque};
 
@@ -90,7 +91,7 @@ pub struct BarMaterials {
     pub materials: Vec<Handle<BarMaterial>>,
 }
 
-/// Marker component for bar container entities.
+/// Container component for bar layout configuration and management.
 ///
 /// This component automatically includes all required components for bar rendering
 /// using Bevy 0.15's Required Components feature. Simply add this component to
@@ -99,9 +100,26 @@ pub struct BarMaterials {
 /// - `BarMaterials`: Material handles for bar shaders
 /// - `SampledValues`: Current metric values cache
 /// - `BarScaleStates`: Dynamic scaling state for bars
-#[derive(Component, Default)]
-#[require(BarsHandles, BarMaterials, SampledValues, BarScaleStates)]
-pub struct BarsContainer;
+#[derive(Component)]
+#[require(BarsHandles, BarMaterials, SampledValues, BarScaleStates, Visibility)]
+pub struct BarsContainer {
+    /// Number of columns in the bar grid layout
+    pub column_count: usize,
+    /// Total width of the bar container in pixels
+    pub width: f32,
+    /// Height of each bar row in pixels
+    pub row_height: f32,
+}
+
+impl Default for BarsContainer {
+    fn default() -> Self {
+        Self {
+            column_count: 2,
+            width: 300.0,
+            row_height: 24.0,
+        }
+    }
+}
 
 impl BarMaterials {
     /// Create new BarMaterials with empty materials list

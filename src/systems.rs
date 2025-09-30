@@ -61,7 +61,7 @@ pub fn create_hud(
             GraphConfig::default(),
             HudHandles::default(),
             GraphHandles::default(),
-            BarsContainer,
+            BarsContainer::default(),
             HistoryBuffers::default(),
             GraphScaleState::default(),
         ))

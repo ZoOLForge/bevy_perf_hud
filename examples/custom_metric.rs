@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    BarConfig, BarScaleMode, BevyPerfHudPlugin, CurveConfig, MetricDefinition, MetricSampleContext,
-    PerfHudAppExt, PerfMetricProvider, create_hud, GraphConfig, MetricRegistry
+    BarConfig, BevyPerfHudPlugin, MetricDefinition, MetricSampleContext,
+    PerfHudAppExt, PerfMetricProvider, MetricRegistry,
+    BarMaterial, BarParams, BarMaterials, BarsContainer, BarsHandles,
+    GraphConfig, GraphHandles, GraphLabelHandle, HistoryBuffers, GraphScaleState,
+    MultiLineGraphMaterial, MultiLineGraphParams, CurveConfig, HudHandles, MAX_CURVES
 };
 
 const CUSTOM_METRIC_ID: &str = "custom/network_latency_ms";
@@ -45,12 +48,13 @@ impl PerfMetricProvider for NetworkLatencyMetric {
     }
 }
 
-fn apply_custom_metric_config(
-    mut graph_config_query: Query<&mut GraphConfig>,
+fn setup_hud(
     mut commands: Commands,
+    mut bar_mats: ResMut<Assets<BarMaterial>>,
+    mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     mut metric_registry: ResMut<MetricRegistry>,
 ) {
-    // Extend default HUD with network latency metric
+    // Define custom network latency metric
     let latency_metric = MetricDefinition {
         id: CUSTOM_METRIC_ID.into(),
         label: Some("Latency".into()),
@@ -62,14 +66,8 @@ fn apply_custom_metric_config(
     // Register the metric definition
     metric_registry.register(latency_metric.clone());
 
-    // Spawn the metric definition as component
-    commands.spawn(latency_metric.clone());
-
-    let Ok(mut graph_config) = graph_config_query.single_mut() else {
-        return;
-    };
-
-    // Update graph settings
+    // Create root HUD entity with custom graph configuration
+    let mut graph_config = GraphConfig::default();
     graph_config.max_y = 160.0;
     graph_config.curves.push(CurveConfig {
         metric_id: latency_metric.id.clone(),
@@ -78,47 +76,306 @@ fn apply_custom_metric_config(
         quantize_step: Some(0.5),
     });
 
-    // Add a separate entity for the custom latency bar configuration with percentile scaling
-    // Percentile mode is perfect for latency as it handles spikes gracefully
-    commands.spawn((
-        BarConfig {
-            metric_id: latency_metric.id.clone(),
-            show_value: Some(true),
-            min_value: 0.0,   // Fallback minimum
-            max_value: 200.0, // Fallback maximum
-            scale_mode: BarScaleMode::Percentile {
-                lower: 10.0,       // P10 - ignore bottom 10% of samples
-                upper: 95.0,       // P95 - ignore top 5% spikes (outliers)
-                sample_count: 180, // 3 seconds of samples for good statistics
-            },
-            min_limit: Some(0.0),    // Hard minimum (latency can't be negative)
-            max_limit: Some(1000.0), // Hard maximum (cap extreme outliers)
-            bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
-        },
-        latency_metric.clone(), // Also attach the metric definition to the same entity
-    ));
+    // BarsContainer brings in: BarsHandles, BarMaterials, SampledValues, BarScaleStates
+    let bars_container = BarsContainer {
+        column_count: 2,
+        width: 300.0,
+        row_height: 24.0,
+    };
 
-    // To modify the entity count bar, we need to spawn a new BarConfig with updated values
-    // Since there's no direct access to the existing bar config, we'll add a modified version
-    if let Some(entity_count_metric) = metric_registry.get("entity_count").cloned() {
-        commands.spawn((
-            BarConfig {
-                metric_id: "entity_count".into(),
-                show_value: Some(true), // Show actual count
-                min_value: 0.0,
-                max_value: 10000.0, // Entity count range - fallback values
-                scale_mode: BarScaleMode::Auto {
-                    smoothing: 0.7,   // Moderately smooth transitions
-                    min_span: 50.0,   // Minimum range of 50 entities
-                    margin_frac: 0.2, // 20% margin for headroom
-                },
-                min_limit: Some(0.0),     // Entities can't be negative
-                max_limit: Some(100000.0), // Reasonable upper bound
-                bg_color: Color::srgba(0.12, 0.12, 0.12, 0.6), // Default background color
+    // Cache layout values before moving bars_container
+    let column_count = bars_container.column_count;
+    let bars_width = bars_container.width;
+    let row_height = bars_container.row_height;
+
+    let hud_root = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(16.0),
+                left: Val::Px(20.0),
+                flex_direction: FlexDirection::Column,
+                ..default()
             },
-            entity_count_metric, // Get the existing entity count metric definition
+            graph_config.clone(),
+            HudHandles::default(),
+            GraphHandles::default(),
+            HistoryBuffers::default(),
+            GraphScaleState::default(),
+            bars_container, // BarsContainer automatically brings SampledValues
+        ))
+        .id();
+    commands.entity(hud_root).insert(Visibility::Visible);
+
+    // Create graph UI
+    let mut graph_params = MultiLineGraphParams::default();
+    graph_params.length = 0;
+    graph_params.min_y = graph_config.min_y;
+    graph_params.max_y = graph_config.max_y;
+    graph_params.thickness = graph_config.thickness;
+    graph_params.bg_color = graph_config.bg_color.to_linear().to_vec4();
+    graph_params.border_color = graph_config.border.color.to_linear().to_vec4();
+    graph_params.border_thickness = graph_config.border.thickness;
+    graph_params.border_thickness_uv_x =
+        (graph_config.border.thickness / graph_config.size.x).max(0.0001);
+    graph_params.border_thickness_uv_y =
+        (graph_config.border.thickness / graph_config.size.y).max(0.0001);
+    graph_params.border_left = if graph_config.border.left { 1 } else { 0 };
+    graph_params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
+    graph_params.border_right = if graph_config.border.right { 1 } else { 0 };
+    graph_params.border_top = if graph_config.border.top { 1 } else { 0 };
+    graph_params.curve_count = graph_config.curves.len().min(MAX_CURVES) as u32;
+
+    // Write curve colors
+    for (i, c) in graph_config.curves.iter().take(MAX_CURVES).enumerate() {
+        let v = if let Some(metric_def) = metric_registry.get(&c.metric_id) {
+            metric_def.color.to_linear().to_vec4()
+        } else {
+            Color::WHITE.to_linear().to_vec4()
+        };
+        graph_params.colors[i] = v;
+    }
+
+    // Create graph row container
+    let label_width = graph_config.label_width.max(40.0);
+    let graph_row = commands
+        .spawn((Node {
+            width: Val::Px(graph_config.size.x + label_width),
+            height: Val::Px(graph_config.size.y),
+            flex_direction: FlexDirection::Row,
+            ..default()
+        },))
+        .id();
+    commands.entity(graph_row).insert(ChildOf(hud_root));
+    commands.entity(graph_row).insert(Visibility::Visible);
+
+    // Create label container
+    let label_container = commands
+        .spawn((Node {
+            width: Val::Px(label_width),
+            height: Val::Px(graph_config.size.y),
+            flex_direction: FlexDirection::Column,
+            ..default()
+        },))
+        .id();
+    commands.entity(label_container).insert(ChildOf(graph_row));
+
+    // Create graph labels
+    let mut graph_labels: Vec<GraphLabelHandle> = Vec::new();
+    for curve in graph_config.curves.iter().take(MAX_CURVES) {
+        let eid = commands
+            .spawn((
+                Text::new(""),
+                TextColor(Color::WHITE),
+                TextFont {
+                    font_size: 10.0,
+                    ..default()
+                },
+                Node {
+                    width: Val::Px(label_width),
+                    height: Val::Px(16.0),
+                    ..default()
+                },
+            ))
+            .id();
+        commands.entity(eid).insert(ChildOf(label_container));
+        graph_labels.push(GraphLabelHandle {
+            metric_id: curve.metric_id.clone(),
+            entity: eid,
+        });
+    }
+
+    // Create graph material and entity
+    let graph_material = graph_mats.add(MultiLineGraphMaterial {
+        params: graph_params,
+    });
+    let graph_entity = commands
+        .spawn((
+            MaterialNode(graph_material.clone()),
+            Node {
+                width: Val::Px(graph_config.size.x),
+                height: Val::Px(graph_config.size.y),
+                ..default()
+            },
+        ))
+        .id();
+    commands.entity(graph_entity).insert(ChildOf(graph_row));
+
+    // Update GraphHandles
+    commands.entity(hud_root).insert(GraphHandles {
+        root: Some(hud_root),
+        graph_row: Some(graph_row),
+        graph_entity: Some(graph_entity),
+        graph_material: Some(graph_material.clone()),
+        graph_labels: graph_labels.clone(),
+        graph_label_width: label_width,
+    });
+
+    // Get entity count metric from registry
+    let entity_count_metric = metric_registry.get("entity_count").cloned().unwrap();
+
+    // Configure bars with different scaling modes using helper methods
+    let bar_configs_and_metrics = vec![
+        // Latency - percentile mode to handle spikes
+        (
+            BarConfig::percentile_mode(CUSTOM_METRIC_ID, 0.0, 200.0),
+            latency_metric.clone()
+        ),
+        // Entity count - auto mode for dynamic range
+        (
+            BarConfig::auto_mode("entity_count", 0.0, 10000.0),
+            entity_count_metric.clone()
+        ),
+    ];
+
+    // Spawn individual BarConfig entities for each bar
+    for (bar_config, metric_def) in &bar_configs_and_metrics {
+        commands.spawn((
+            bar_config.clone(),
+            metric_def.clone(),
         ));
     }
+
+    // Calculate layout dimensions from cached values
+    let column_width = (bars_width - 12.0) / column_count as f32;
+    let total_height = (bar_configs_and_metrics.len() as f32 / column_count as f32).ceil() * row_height;
+
+    // Create bars root container below the graph (plain Node, not BarsContainer)
+    let bars_root = commands
+        .spawn(Node {
+            width: Val::Px(bars_width),
+            height: Val::Px(total_height),
+            flex_direction: FlexDirection::Column,
+            margin: UiRect {
+                top: Val::Px(4.0),
+                ..default()
+            },
+            ..default()
+        })
+        .id();
+    commands.entity(bars_root).insert(ChildOf(hud_root));
+
+    // Create bar materials and labels for each bar configuration
+    let mut bar_materials: Vec<Handle<BarMaterial>> = Vec::new();
+    let mut bar_labels: Vec<Entity> = Vec::new();
+
+    for (_chunk_index, chunk) in bar_configs_and_metrics.chunks(column_count).enumerate() {
+        let row = commands
+            .spawn((Node {
+                width: Val::Px(bars_width),
+                height: Val::Px(row_height),
+                flex_direction: FlexDirection::Row,
+                margin: UiRect {
+                    top: Val::Px(1.0),
+                    ..default()
+                },
+                ..default()
+            },))
+            .id();
+        commands.entity(row).insert(ChildOf(bars_root));
+
+        for (col_idx, (bar_config, metric_definition)) in chunk.iter().enumerate() {
+            // Create column container
+            let column = commands
+                .spawn((Node {
+                    width: Val::Px(column_width),
+                    height: Val::Px(row_height),
+                    margin: UiRect {
+                        right: if col_idx + 1 == column_count || col_idx + 1 == chunk.len() {
+                            Val::Px(0.0)
+                        } else {
+                            Val::Px(8.0)
+                        },
+                        ..default()
+                    },
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },))
+                .id();
+            commands.entity(column).insert(ChildOf(row));
+
+            // Create bar material
+            let color = metric_definition.color;
+            let mat = bar_mats.add(BarMaterial {
+                params: BarParams {
+                    value: 0.0,
+                    r: color.to_linear().to_vec4().x,
+                    g: color.to_linear().to_vec4().y,
+                    b: color.to_linear().to_vec4().z,
+                    a: color.to_linear().to_vec4().w,
+                    bg_r: bar_config.bg_color.to_linear().to_vec4().x,
+                    bg_g: bar_config.bg_color.to_linear().to_vec4().y,
+                    bg_b: bar_config.bg_color.to_linear().to_vec4().z,
+                    bg_a: bar_config.bg_color.to_linear().to_vec4().w,
+                },
+            });
+
+            // Create bar entity
+            let bar_entity = commands
+                .spawn((
+                    MaterialNode(mat.clone()),
+                    Node {
+                        width: Val::Px(column_width),
+                        height: Val::Px(row_height - 4.0),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(bar_entity).insert(ChildOf(column));
+
+            // Create bar label
+            let base_label = metric_definition
+                .label
+                .clone()
+                .unwrap_or_else(|| bar_config.metric_id.clone());
+            let bar_label = commands
+                .spawn((
+                    Text::new(base_label),
+                    TextColor(Color::WHITE),
+                    TextFont {
+                        font_size: 10.0,
+                        ..default()
+                    },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(6.0),
+                        top: Val::Px(5.0),
+                        width: Val::Px(column_width - 12.0),
+                        overflow: Overflow::hidden(),
+                        ..default()
+                    },
+                ))
+                .id();
+            commands.entity(bar_label).insert(ChildOf(bar_entity));
+
+            bar_materials.push(mat);
+            bar_labels.push(bar_label);
+        }
+    }
+
+    // Update the BarsHandles component (auto-created by BarsContainer on hud_root)
+    commands.entity(hud_root).insert(BarsHandles {
+        bars_root: Some(bars_root),
+        bar_labels: bar_labels.clone(),
+    });
+
+    // Update the BarMaterials component (auto-created by BarsContainer on hud_root)
+    commands.entity(hud_root).insert(BarMaterials {
+        materials: bar_materials.clone(),
+    });
+
+    // Update HudHandles on hud_root
+    commands.entity(hud_root).insert(HudHandles {
+        root: Some(hud_root),
+        graph_row: Some(graph_row),
+        graph_entity: Some(graph_entity),
+        graph_material: Some(graph_material),
+        graph_labels,
+        graph_label_width: label_width,
+        bars_root: Some(bars_root),
+        bar_materials,
+        bar_labels,
+    });
 }
 
 fn main() {
@@ -134,8 +391,7 @@ fn main() {
         }))
         .add_plugins(BevyPerfHudPlugin)
         .add_systems(Startup, setup_scene)
-        .add_systems(Startup, create_hud) // Create HUD layout
-        .add_systems(Startup, apply_custom_metric_config.after(create_hud)) // Apply custom configurations
+        .add_systems(Startup, setup_hud) // Create HUD with custom bars
         .add_perf_metric_provider(NetworkLatencyMetric::default())
         .run();
 }
