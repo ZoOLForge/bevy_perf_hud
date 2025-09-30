@@ -334,21 +334,6 @@ fn setup_hud(
         }
     }
 
-    // Spawn CurveConfig entities for the default graph curves
-    commands.spawn(CurveConfig {
-        metric_id: "frame_time_ms".into(),
-        autoscale: Some(true),
-        smoothing: Some(0.2),
-        quantize_step: Some(1.0),
-    });
-
-    commands.spawn(CurveConfig {
-        metric_id: "fps".into(),
-        autoscale: Some(true),
-        smoothing: Some(0.2),
-        quantize_step: Some(1.0),
-    });
-
     // Create GraphContainer and GraphConfig
     let graph_config = GraphConfig::default();
     let graph_container = GraphContainer {
@@ -385,6 +370,22 @@ fn setup_hud(
             HudHandles::default(),
             bars_container,
         ))
+        .with_children(|parent| {
+            // Spawn CurveConfig entities as children of the graph container
+            parent.spawn(CurveConfig {
+                metric_id: "frame_time_ms".into(),
+                autoscale: Some(true),
+                smoothing: Some(0.2),
+                quantize_step: Some(1.0),
+            });
+
+            parent.spawn(CurveConfig {
+                metric_id: "fps".into(),
+                autoscale: Some(true),
+                smoothing: Some(0.2),
+                quantize_step: Some(1.0),
+            });
+        })
         .id();
 
     // Configure bars with different scaling modes

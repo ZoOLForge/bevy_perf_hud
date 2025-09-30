@@ -53,15 +53,17 @@ pub fn sample_diagnostics(
 
 /// System that updates only the graph display with current performance data.
 /// Uses entities with GraphConfig and GraphHandles components.
-/// Queries CurveConfig entities to get curve configurations.
+/// Queries CurveConfig entities that are children of the graph container.
 #[allow(clippy::too_many_arguments)]
 pub fn update_graph(
     mut graph_query: Query<(
+        Entity,
         &GraphConfig,
         &mut GraphHandles,
         &mut SampledValues,
         &mut HistoryBuffers,
         &mut GraphScaleState,
+        &Children,
     )>,
     curve_config_query: Query<&crate::CurveConfig>,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
@@ -69,10 +71,15 @@ pub fn update_graph(
     mut label_color_q: Query<&mut TextColor>,
     metric_registry: Res<MetricRegistry>,
 ) {
-    for (graph_config, h, samples, mut history, mut scale_state) in graph_query.iter_mut() {
-        // Collect all curve configurations
-        let curve_configs: Vec<crate::CurveConfig> =
-            curve_config_query.iter().map(|cfg| cfg.clone()).collect();
+    for (_entity, graph_config, h, samples, mut history, mut scale_state, children) in
+        graph_query.iter_mut()
+    {
+        // Collect curve configurations from children of this graph container
+        let curve_configs: Vec<crate::CurveConfig> = children
+            .iter()
+            .filter_map(|child| curve_config_query.get(child).ok())
+            .cloned()
+            .collect();
         let curve_count = curve_configs.len().min(MAX_CURVES);
 
         // Process raw metric values through smoothing and quantization pipeline
@@ -609,21 +616,26 @@ pub fn initialize_bars_ui(
 
 /// System that creates UI elements for graph when GraphContainer is added.
 /// Similar to initialize_bars_ui but for graphs.
-/// Queries all CurveConfig entities and creates UI for them.
+/// Queries CurveConfig entities that are children of the GraphContainer.
 pub fn initialize_graph_ui(
     mut commands: Commands,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
     graph_container_query: Query<
-        (Entity, &crate::GraphContainer, Option<&GraphHandles>),
+        (Entity, &crate::GraphContainer, Option<&GraphHandles>, &Children),
         Added<crate::GraphContainer>,
     >,
     curve_config_query: Query<&crate::CurveConfig>,
     metric_registry: Res<MetricRegistry>,
 ) {
-    for (container_entity, graph_container, graph_handles_opt) in graph_container_query.iter() {
-        // Collect all curve configurations
-        let curve_configs: Vec<crate::CurveConfig> =
-            curve_config_query.iter().map(|cfg| cfg.clone()).collect();
+    for (container_entity, graph_container, graph_handles_opt, children) in
+        graph_container_query.iter()
+    {
+        // Collect curve configurations from children of this container
+        let curve_configs: Vec<crate::CurveConfig> = children
+            .iter()
+            .filter_map(|child| curve_config_query.get(child).ok())
+            .cloned()
+            .collect();
 
         if curve_configs.is_empty() {
             continue;

@@ -15,9 +15,8 @@
 
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    BevyPerfHudPlugin, CurveConfig, CurveDefaults, GraphBorder, GraphConfig, GraphContainer,
-    GraphHandles, MetricDefinition, MetricRegistry, MetricSampleContext,
-    PerfHudAppExt, PerfMetricProvider, ProviderRegistry,
+    BevyPerfHudPlugin, CurveConfig, GraphConfig, GraphContainer, GraphHandles, MetricDefinition,
+    MetricRegistry, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, ProviderRegistry,
 };
 fn main() {
     App::new()
@@ -71,31 +70,6 @@ fn setup_graph_hud(
         }
     }
 
-    // Spawn CurveConfig entities for each curve
-    // Wave with autoscale and moderate smoothing
-    commands.spawn(CurveConfig {
-        metric_id: "wave/smooth".into(),
-        autoscale: Some(true),
-        smoothing: Some(0.3),
-        quantize_step: Some(1.0),
-    });
-
-    // Noise with heavy smoothing to show smoothing effect
-    commands.spawn(CurveConfig {
-        metric_id: "noise/raw".into(),
-        autoscale: Some(true),
-        smoothing: Some(0.8), // Heavy smoothing for noisy data
-        quantize_step: None,
-    });
-
-    // Step with quantization to show discrete values
-    commands.spawn(CurveConfig {
-        metric_id: "step/quantized".into(),
-        autoscale: Some(false), // Fixed range
-        smoothing: Some(0.1), // Minimal smoothing
-        quantize_step: Some(10.0), // Snap to multiples of 10
-    });
-
     // Configure graph appearance and behavior
     let graph_config = GraphConfig {
         size: Vec2::new(400.0, 120.0),
@@ -103,26 +77,7 @@ fn setup_graph_hud(
         min_y: 0.0,
         max_y: 60.0,
         thickness: 0.015,
-        curve_defaults: CurveDefaults {
-            autoscale: true,
-            smoothing: 0.2,
-            quantize_step: 1.0,
-        },
-        bg_color: Color::srgba(0.0, 0.0, 0.0, 0.3),
-        border: GraphBorder {
-            color: Color::srgba(1.0, 1.0, 1.0, 1.0),
-            thickness: 2.0,
-            left: true,
-            bottom: true,
-            right: false,
-            top: false,
-        },
-        y_ticks: 3,
-        y_include_zero: true,
-        y_min_span: 10.0,
-        y_margin_frac: 0.15,
-        y_step_quantize: 10.0,
-        y_scale_smoothing: 0.3,
+        ..Default::default()
     };
 
     // Create GraphContainer - automatically includes GraphHandles, GraphConfig,
@@ -132,19 +87,45 @@ fn setup_graph_hud(
         label_width: graph_config.label_width,
     };
 
-    // Spawn root UI node with GraphContainer
+    // Spawn root UI node with GraphContainer and CurveConfig children
     // The initialize_graph_ui system will automatically create all child UI entities
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(20.0),
-            left: Val::Px(20.0),
-            flex_direction: FlexDirection::Column,
-            ..default()
-        },
-        graph_config,
-        graph_container,
-    ));
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(20.0),
+                left: Val::Px(20.0),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            graph_config,
+            graph_container,
+        ))
+        .with_children(|parent| {
+            // Wave with autoscale and moderate smoothing
+            parent.spawn(CurveConfig {
+                metric_id: "wave/smooth".into(),
+                autoscale: Some(true),
+                smoothing: Some(0.3),
+                quantize_step: Some(1.0),
+            });
+
+            // Noise with heavy smoothing to show smoothing effect
+            parent.spawn(CurveConfig {
+                metric_id: "noise/raw".into(),
+                autoscale: Some(true),
+                smoothing: Some(0.8), // Heavy smoothing for noisy data
+                quantize_step: None,
+            });
+
+            // Step with quantization to show discrete values
+            parent.spawn(CurveConfig {
+                metric_id: "step/quantized".into(),
+                autoscale: Some(false), // Fixed range
+                smoothing: Some(0.1), // Minimal smoothing
+                quantize_step: Some(10.0), // Snap to multiples of 10
+            });
+        });
 }
 
 /// Toggle graph visibility with Space key
