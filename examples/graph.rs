@@ -29,17 +29,17 @@ fn main() {
         .add_perf_metric_provider(
             WaveMetric::new("wave/smooth", 10.0, 50.0, 0.5)
                 .with_label("Wave (Smooth)")
-                .with_color(Color::srgb(1.0, 0.3, 0.3)),
+                .with_color(Color::srgb(1.0, 0.2, 0.3)), // Bright red
         )
         .add_perf_metric_provider(
             NoiseMetric::new("noise/raw", 0.0, 30.0)
                 .with_label("Noise (Raw)")
-                .with_color(Color::srgb(0.3, 1.0, 0.3)),
+                .with_color(Color::srgb(0.2, 1.0, 0.3)), // Bright green
         )
         .add_perf_metric_provider(
             StepMetric::new("step/quantized", 0.0, 100.0)
                 .with_label("Step (Quantized)")
-                .with_color(Color::srgb(0.3, 0.6, 1.0)),
+                .with_color(Color::srgb(0.3, 0.7, 1.0)), // Bright cyan-blue
         )
         .add_systems(Update, toggle_visibility)
         .run();
