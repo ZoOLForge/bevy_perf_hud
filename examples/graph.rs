@@ -15,7 +15,7 @@
 
 use bevy::prelude::*;
 use bevy_perf_hud::{
-    BevyPerfHudPlugin, CurveConfig, GraphConfig, GraphContainer, GraphHandles, MetricDefinition,
+    BevyPerfHudPlugin, CurveConfig, GraphConfig, GraphHandles, MetricDefinition,
     MetricRegistry, MetricSampleContext, PerfHudAppExt, PerfMetricProvider, ProviderRegistry,
 };
 fn main() {
@@ -95,6 +95,8 @@ fn setup_graph_hud(
     }
 
     // Configure graph appearance and behavior
+    // GraphConfig automatically includes GraphHandles, HistoryBuffers,
+    // GraphScaleState, SampledValues, and Visibility via #[require]
     let graph_config = GraphConfig {
         size: Vec2::new(400.0, 120.0),
         label_width: 100.0,
@@ -102,13 +104,6 @@ fn setup_graph_hud(
         max_y: 60.0,
         thickness: 0.015,
         ..Default::default()
-    };
-
-    // Create GraphContainer - automatically includes GraphHandles, GraphConfig,
-    // HistoryBuffers, GraphScaleState, SampledValues, and Visibility
-    let graph_container = GraphContainer {
-        size: graph_config.size,
-        label_width: graph_config.label_width,
     };
 
     // Spawn first graph (top-left) with three curves
@@ -121,8 +116,7 @@ fn setup_graph_hud(
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            graph_config.clone(),
-            graph_container,
+            graph_config,
         ))
         .with_children(|parent| {
             // Wave with autoscale and moderate smoothing
@@ -160,11 +154,6 @@ fn setup_graph_hud(
         ..Default::default()
     };
 
-    let graph_container2 = GraphContainer {
-        size: graph_config2.size,
-        label_width: graph_config2.label_width,
-    };
-
     commands
         .spawn((
             Node {
@@ -175,7 +164,6 @@ fn setup_graph_hud(
                 ..default()
             },
             graph_config2,
-            graph_container2,
         ))
         .with_children(|parent| {
             // Different curves for the second graph

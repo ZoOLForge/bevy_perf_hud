@@ -24,40 +24,6 @@ pub struct GraphLabelHandle {
     pub entity: Entity,
 }
 
-/// Container component for graph layout configuration and management.
-///
-/// This component automatically includes all required components for graph rendering
-/// using Bevy 0.15's Required Components feature. Simply add this component to
-/// an entity and Bevy will automatically attach:
-/// - `GraphHandles`: Entity handles for graph UI elements
-/// - `GraphConfig`: Graph display configuration
-/// - `HistoryBuffers`: Historical data for curves
-/// - `GraphScaleState`: Dynamic Y-axis scaling state
-/// - `SampledValues`: Current metric values cache
-#[derive(Component)]
-#[require(
-    GraphHandles,
-    GraphConfig,
-    HistoryBuffers,
-    GraphScaleState,
-    super::SampledValues,
-    Visibility
-)]
-pub struct GraphContainer {
-    /// Size of the graph area in pixels (width, height)
-    pub size: Vec2,
-    /// Width in pixels reserved for metric labels on the left side
-    pub label_width: f32,
-}
-
-impl Default for GraphContainer {
-    fn default() -> Self {
-        Self {
-            size: Vec2::new(400.0, 120.0),
-            label_width: 100.0,
-        }
-    }
-}
 
 /// Component containing handles to graph-related entities and materials.
 ///
@@ -269,8 +235,25 @@ impl Default for GraphSettings {
 }
 
 /// Component storing configuration for the performance graph display.
-/// Curves are now defined as separate CurveConfig component entities.
+///
+/// This component automatically includes all required components for graph rendering
+/// using Bevy 0.15's Required Components feature. Simply add this component to
+/// an entity and Bevy will automatically attach:
+/// - `GraphHandles`: Entity handles for graph UI elements
+/// - `HistoryBuffers`: Historical data for curves
+/// - `GraphScaleState`: Dynamic Y-axis scaling state
+/// - `SampledValues`: Current metric values cache
+/// - `Visibility`: UI visibility control
+///
+/// Curves are defined as separate CurveConfig component entities as children.
 #[derive(Component, Debug, Clone)]
+#[require(
+    GraphHandles,
+    HistoryBuffers,
+    GraphScaleState,
+    super::SampledValues,
+    Visibility
+)]
 pub struct GraphConfig {
     /// Size of the graph area in pixels (width, height)
     pub size: Vec2,

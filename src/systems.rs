@@ -30,7 +30,7 @@ use crate::{
 
 /// System that samples all registered metric providers and updates current values.
 /// This system now runs unconditionally to collect metric data.
-/// Updates all SampledValues instances (one per GraphContainer/BarsContainer).
+/// Updates all SampledValues instances (one per GraphConfig/BarsContainer).
 pub fn sample_diagnostics(
     diagnostics: Option<Res<DiagnosticsStore>>,
     mut sampled_values_query: Query<&mut SampledValues>,
@@ -614,21 +614,21 @@ pub fn initialize_bars_ui(
 
 
 
-/// System that creates UI elements for graph when GraphContainer is added.
+/// System that creates UI elements for graph when GraphConfig is added.
 /// Similar to initialize_bars_ui but for graphs.
-/// Queries CurveConfig entities that are children of the GraphContainer.
+/// Queries CurveConfig entities that are children of the GraphConfig entity.
 pub fn initialize_graph_ui(
     mut commands: Commands,
     mut graph_mats: ResMut<Assets<MultiLineGraphMaterial>>,
-    graph_container_query: Query<
-        (Entity, &crate::GraphContainer, Option<&GraphHandles>, &Children),
-        Added<crate::GraphContainer>,
+    graph_config_query: Query<
+        (Entity, &GraphConfig, Option<&GraphHandles>, &Children),
+        Added<GraphConfig>,
     >,
     curve_config_query: Query<&crate::CurveConfig>,
     metric_registry: Res<MetricRegistry>,
 ) {
-    for (container_entity, graph_container, graph_handles_opt, children) in
-        graph_container_query.iter()
+    for (container_entity, graph_config, graph_handles_opt, children) in
+        graph_config_query.iter()
     {
         // Collect curve configurations from children of this container
         let curve_configs: Vec<crate::CurveConfig> = children
@@ -640,10 +640,6 @@ pub fn initialize_graph_ui(
         if curve_configs.is_empty() {
             continue;
         }
-
-        // Get the graph configuration from the container entity if it exists
-        // Otherwise use default
-        let graph_config = crate::GraphConfig::default();
 
         // Determine the parent entity for graph UI:
         // If there's a root in GraphHandles, use it; otherwise use the container itself
@@ -663,9 +659,9 @@ pub fn initialize_graph_ui(
             graph_params.border_color = graph_config.border.color.to_linear().to_vec4();
             graph_params.border_thickness = graph_config.border.thickness;
             graph_params.border_thickness_uv_x =
-                (graph_config.border.thickness / graph_container.size.x).max(0.0001);
+                (graph_config.border.thickness / graph_config.size.x).max(0.0001);
             graph_params.border_thickness_uv_y =
-                (graph_config.border.thickness / graph_container.size.y).max(0.0001);
+                (graph_config.border.thickness / graph_config.size.y).max(0.0001);
             graph_params.border_left = if graph_config.border.left { 1 } else { 0 };
             graph_params.border_bottom = if graph_config.border.bottom { 1 } else { 0 };
             graph_params.border_right = if graph_config.border.right { 1 } else { 0 };
@@ -683,11 +679,11 @@ pub fn initialize_graph_ui(
         }
 
         // Row container: left labels + right graph
-        let label_width = graph_container.label_width.max(40.0);
+        let label_width = graph_config.label_width.max(40.0);
         let graph_row = commands
             .spawn(Node {
-                width: Val::Px(graph_container.size.x + label_width),
-                height: Val::Px(graph_container.size.y),
+                width: Val::Auto,
+                height: Val::Px(graph_config.size.y),
                 flex_direction: FlexDirection::Row,
                 ..default()
             })
@@ -698,9 +694,10 @@ pub fn initialize_graph_ui(
         // Label container (vertical to avoid overlap)
         let label_container = commands
             .spawn(Node {
-                width: Val::Px(label_width),
-                height: Val::Px(graph_container.size.y),
+                width: Val::Auto,
+                height: Val::Px(graph_config.size.y),
                 flex_direction: FlexDirection::Column,
+                padding: UiRect::right(Val::Px(8.0)),
                 ..default()
             })
             .id();
@@ -718,7 +715,7 @@ pub fn initialize_graph_ui(
                         ..default()
                     },
                     Node {
-                        width: Val::Px(label_width),
+                        width: Val::Auto,
                         height: Val::Px(16.0),
                         ..default()
                     },
@@ -739,8 +736,8 @@ pub fn initialize_graph_ui(
             .spawn((
                 MaterialNode(graph_material.clone()),
                 Node {
-                    width: Val::Px(graph_container.size.x),
-                    height: Val::Px(graph_container.size.y),
+                    width: Val::Px(graph_config.size.x),
+                    height: Val::Px(graph_config.size.y),
                     ..default()
                 },
             ))

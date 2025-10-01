@@ -4,7 +4,7 @@ use bevy_perf_hud::{
     BevyPerfHudPlugin, HudHandles,
     BarConfig, ProviderRegistry,
     BarsContainer, BarsHandles,
-    GraphConfig, GraphContainer, CurveConfig,
+    GraphConfig, CurveConfig,
 };
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq)]
@@ -334,12 +334,9 @@ fn setup_hud(
         }
     }
 
-    // Create GraphContainer and GraphConfig
+    // Create GraphConfig - automatically includes GraphHandles, HistoryBuffers,
+    // GraphScaleState, SampledValues, and Visibility via #[require]
     let graph_config = GraphConfig::default();
-    let graph_container = GraphContainer {
-        size: graph_config.size,
-        label_width: graph_config.label_width,
-    };
 
     // Create BarsContainer
     let bars_container = BarsContainer {
@@ -354,7 +351,7 @@ fn setup_hud(
     let row_height = bars_container.row_height;
 
     // Create root HUD entity with graph and bars components
-    // GraphContainer brings in: GraphHandles, GraphConfig, HistoryBuffers, GraphScaleState, SampledValues, Visibility
+    // GraphConfig brings in: GraphHandles, HistoryBuffers, GraphScaleState, SampledValues, Visibility
     // BarsContainer brings in: BarsHandles, BarMaterials, SampledValues, BarScaleStates
     let hud_root = commands
         .spawn((
@@ -366,7 +363,6 @@ fn setup_hud(
                 ..default()
             },
             graph_config,
-            graph_container,
             HudHandles::default(),
             bars_container,
         ))
