@@ -39,26 +39,25 @@ fn main() {
 /// System wrapper to create bars-only HUD
 fn setup_bars_hud(mut commands: Commands) {
     // UI 2D camera: render after 3D to avoid conflicts
-    let ui_cam = commands.spawn(Camera2d).id();
-    commands.entity(ui_cam).insert(Camera {
-        order: 1,
-        ..default()
-    });
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 1,
+            ..default()
+        },
+    ));
 
     // Create BarConfig instances with different scaling modes
     let bar_configs = vec![
         // Fixed mode bar - traditional static range
         // Using default fallback (0.0-100.0) is sufficient for most cases
         BarConfig::fixed_mode("variable/cpu_load"),
-
         // Auto mode bar - adapts to data range with smoothing
         // Default fallback works well as initial range before data is collected
         BarConfig::auto_mode("variable/memory_usage"),
-
         // Percentile mode bar - uses P5 to P95 range, good for spiky data
         // Default fallback provides a reasonable starting point
         BarConfig::percentile_mode("spiky/latency"),
-
         // If you need custom fallback values, use the _with_fallback variants:
         // BarConfig::fixed_mode_with_fallback("custom_metric", 0.0, 1000.0),
         // BarConfig::auto_mode_with_fallback("custom_metric", 0.0, 10000.0),
@@ -74,7 +73,7 @@ fn setup_bars_hud(mut commands: Commands) {
     // The initialize_bars_ui system will automatically create all child UI entities
     let bars_container = BarsContainer {
         column_count: 2,
-        width: 300.0,
+        width: 400.0,
         row_height: 24.0,
     };
 

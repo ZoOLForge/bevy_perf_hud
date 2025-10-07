@@ -3,13 +3,7 @@
 //! This module contains all component types used by the graph rendering systems.
 
 use bevy::prelude::Visibility;
-use bevy::{
-    asset::Handle,
-    color::Color,
-    ecs::entity::Entity,
-    math::Vec2,
-    prelude::Component,
-};
+use bevy::{asset::Handle, color::Color, ecs::entity::Entity, math::Vec2, prelude::Component};
 
 use crate::{MultiLineGraphMaterial, MAX_CURVES, MAX_SAMPLES};
 
@@ -23,7 +17,6 @@ pub struct GraphLabelHandle {
     /// Bevy entity ID for the text label
     pub entity: Entity,
 }
-
 
 /// Component containing handles to graph-related entities and materials.
 ///
@@ -134,104 +127,6 @@ pub struct GraphBorder {
     pub right: bool,
     /// Whether to draw the top border
     pub top: bool,
-}
-
-/// Configuration for the performance graph (chart) display.
-///
-/// Controls how performance metrics are visualized as time-series graphs,
-/// including appearance, scaling behavior, and which metrics to show.
-/// Curves are now defined as separate CurveConfig component entities.
-#[derive(Debug, Clone)]
-pub struct GraphSettings {
-    /// Size of the graph area in pixels (width, height)
-    pub size: Vec2,
-    /// Width in pixels reserved for metric labels on the left side
-    pub label_width: f32,
-    /// Fixed minimum Y-axis value (used when autoscale is disabled)
-    pub min_y: f32,
-    /// Fixed maximum Y-axis value (used when autoscale is disabled)
-    pub max_y: f32,
-    /// Line thickness for graph curves (0.0-1.0 in normalized coordinates)
-    pub thickness: f32,
-    /// Default settings for curves that don't specify their own values
-    pub curve_defaults: CurveDefaults,
-    /// Background color of the graph area (supports transparency)
-    pub bg_color: Color,
-    /// Border configuration for the graph edges
-    pub border: GraphBorder,
-    /// Number of horizontal grid lines to display (minimum 2)
-    pub y_ticks: u32,
-    /// Whether to always include zero in the Y-axis range
-    pub y_include_zero: bool,
-    /// Minimum Y-axis range to prevent overly compressed scales
-    pub y_min_span: f32,
-    /// Additional margin around data as fraction of range (0.0-0.45)
-    pub y_margin_frac: f32,
-    /// Step size for quantizing Y-axis min/max values (0 = disabled)
-    pub y_step_quantize: f32,
-    /// Smoothing factor for Y-axis scale transitions (0.0-1.0)
-    pub y_scale_smoothing: f32,
-}
-
-impl GraphSettings {
-    /// Convert GraphSettings to MultiLineGraphParams with initial values
-    pub fn to_graph_params(&self) -> crate::render::MultiLineGraphParams {
-        use crate::render::MultiLineGraphParams;
-        use bevy::color::ColorToComponents;
-
-        let mut params = MultiLineGraphParams::default();
-        #[allow(clippy::field_reassign_with_default)]
-        {
-            params.min_y = self.min_y;
-            params.max_y = self.max_y;
-            params.thickness = self.thickness;
-            params.bg_color = self.bg_color.to_linear().to_vec4();
-            params.border_color = self.border.color.to_linear().to_vec4();
-            params.border_thickness = self.border.thickness; // pixels
-            params.border_thickness_uv_x = (self.border.thickness / self.size.x).max(0.0001);
-            params.border_thickness_uv_y = (self.border.thickness / self.size.y).max(0.0001);
-            params.border_left = if self.border.left { 1 } else { 0 };
-            params.border_bottom = if self.border.bottom { 1 } else { 0 };
-            params.border_right = if self.border.right { 1 } else { 0 };
-            params.border_top = if self.border.top { 1 } else { 0 };
-            // Curve count will be set by the system that queries CurveConfig entities
-            params.curve_count = 0;
-        }
-
-        params
-    }
-}
-
-impl Default for GraphSettings {
-    fn default() -> Self {
-        Self {
-            size: Vec2::new(300.0, 80.0),
-            label_width: 60.0,
-            min_y: 0.0,
-            max_y: 30.0,
-            thickness: 0.012,
-            curve_defaults: CurveDefaults {
-                autoscale: true,
-                smoothing: 0.2,
-                quantize_step: 1.0,
-            },
-            bg_color: Color::srgba(0.0, 0.0, 0.0, 0.25),
-            border: GraphBorder {
-                color: Color::srgba(1.0, 1.0, 1.0, 1.0),
-                thickness: 2.0,
-                left: true,
-                bottom: true,
-                right: false,
-                top: false,
-            },
-            y_ticks: 2,
-            y_include_zero: true,
-            y_min_span: 5.0,
-            y_margin_frac: 0.10,
-            y_step_quantize: 5.0,
-            y_scale_smoothing: 0.3,
-        }
-    }
 }
 
 /// Component storing configuration for the performance graph display.
